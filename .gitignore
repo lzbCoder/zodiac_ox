@@ -1,6 +1,7 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+*.egg
 build/
 dist/
 wheels/
@@ -8,3 +9,25 @@ wheels/
 
 # Virtual environments
 .venv
+.env
+
+# IDE
+.idea/
+
+# Runtime data
+logs/
+data/
+
+# Testing & linting
+.mypy_cache/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# uv
+.uv/
+
+# OS
+.DS_Store
+Thumbs.db
