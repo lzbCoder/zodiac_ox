@@ -1,0 +1,49 @@
+[project]
+name = "ox"
+version = "0.1.0"
+description = "越群山知识库RAG系统 - 后端"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "pymilvus>=2.4.0,<3.0.0",
+    "llama-index>=0.14.22",
+    "llama-index-llms-dashscope>=0.2.0",
+    "llama-index-embeddings-dashscope>=0.2.0",
+    "dashscope>=1.20.0",
+    "python-multipart>=0.0.9",
+    "aiofiles>=24.1.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "tree-sitter>=0.25.2",
+    "tree-sitter-language-pack>=1.8.0",
+    "loguru>=0.7.3",
+    "beautifulsoup4>=4.14.3",
+    "openpyxl>=3.1.5",
+    "redis>=5.0.0",
+    "llama-index-readers-file>=0.6.0",
+    "opentelemetry-api>=1.41.1",
+    "opentelemetry-sdk>=1.41.1",
+    "opentelemetry-exporter-otlp>=1.41.1",
+    "opentelemetry-instrumentation-fastapi>=0.62b1",
+    "jieba>=0.42.1",
+    "openai>=2.36.0",
+    "llama-index-vector-stores-milvus>=1.1.0",
+    "docx2txt>=0.9",
+    "pypdf>=6.11.0",
+    "ragas>=0.4.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
