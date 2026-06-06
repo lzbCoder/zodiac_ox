@@ -25,12 +25,12 @@ uv sync
 系统使用默认配置连接 PostgreSQL 和 Milvus，可通过环境变量覆盖:
 
 ```bash
-export PG_HOST=123.56.74.230
+export PG_HOST=localhost
 export PG_PORT=5432
 export PG_DATABASE=ox
 export PG_USER=postgres
 export PG_PASSWORD=postgres@zodiac
-export MILVUS_URI=http://123.56.74.230:19530
+export MILVUS_URI=http://localhost:19530
 export MILVUS_TOKEN=root:Milvus
 export DASHSCOPE_API_KEY=sk-xxx
 export LLM_MODEL=qwen3-max
@@ -61,8 +61,8 @@ uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 docker build -t ox-backend .
 docker run -p 8000:8000 \
-  -e PG_HOST=123.56.74.230 \
-  -e MILVUS_URI=http://123.56.74.230:19530 \
+  -e PG_HOST=127.0.0.1 \
+  -e MILVUS_URI=http://127.0.0.1:19530 \
   -e DASHSCOPE_API_KEY=sk-xxx \
   -v $(pwd)/data:/app/data \
   ox-backend

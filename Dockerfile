@@ -1,4 +1,4 @@
-FROM 123.56.74.230:5000/zodiac/zodiac-python-base:1.0
+FROM 127.0.0.1:5000/zodiac/zodiac-python-base:1.0
 
 # 覆盖默认端口
 ENV UVICORN_PORT=16900
