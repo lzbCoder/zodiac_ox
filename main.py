@@ -108,15 +108,18 @@ async def limit_request_size(request: Request, call_next):
     return await call_next(request)
 
 
-# Access log middleware — routes every request through Loguru
+# Access log middleware — 记录客户端访问（IP/会话等），写日志文件 + 按需落库。
+# 记录逻辑全程异常隔离，绝不影响主流程。
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
-    elapsed_ms = (time.perf_counter() - start) * 1000
-    logger.info(
-        f"{request.method} {request.url.path} → {response.status_code} ({elapsed_ms:.0f}ms)"
-    )
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    try:
+        from services.access_log_service import record_access
+        await record_access(request, response.status_code, elapsed_ms)
+    except Exception as e:
+        logger.warning(f"访问记录中间件异常：{e}")
     return response
 
 

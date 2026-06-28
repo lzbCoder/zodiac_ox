@@ -13,3 +13,4 @@ from .rag_eval_label_task import RagEvalLabelTask
 from .rag_eval_label_detail import RagEvalLabelDetail
 from .chat_trace import ChatTrace
 from .chat_chunk_detail import ChatChunkDetail
+from .access_log import AccessLog

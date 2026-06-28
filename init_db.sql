@@ -273,3 +273,25 @@ CREATE TABLE IF NOT EXISTS root.chat_chunk_details (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_chunk_details_chat_id ON root.chat_chunk_details(chat_id);
 CREATE INDEX IF NOT EXISTS idx_chat_chunk_details_chunk_id ON root.chat_chunk_details(chunk_id);
+
+-- ============================================
+-- 客户端访问记录表 — 审计/统计
+-- 按 IP/会话首次去重写入（30 分钟窗口），详见 services/access_log_service.py
+-- ============================================
+
+-- 16. 访问记录表
+CREATE TABLE IF NOT EXISTS root.access_log (
+    id          BIGSERIAL PRIMARY KEY,
+    client_ip   VARCHAR(64),
+    session_id  VARCHAR(64),
+    user_id     VARCHAR(64),
+    method      VARCHAR(10),
+    path        VARCHAR(500),
+    status_code INT,
+    user_agent  TEXT,
+    referer     VARCHAR(500),
+    cost_ms     BIGINT,
+    create_time TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_access_log_ip_time ON root.access_log(client_ip, create_time DESC);
+CREATE INDEX IF NOT EXISTS idx_access_log_time ON root.access_log(create_time DESC);
