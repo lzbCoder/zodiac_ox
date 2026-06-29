@@ -51,6 +51,14 @@ class RetrievalConfigResponse(BaseModel):
     final_top_k: int
 
 
+class ModelConfigRequest(BaseModel):
+    models: list[str]
+
+
+class ModelConfigResponse(BaseModel):
+    models: list[str]
+
+
 class FeatureFlagsResponse(BaseModel):
     otel_enabled: bool
     memory_enabled: bool

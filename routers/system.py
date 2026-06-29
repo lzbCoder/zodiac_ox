@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db, engine
-from schemas.system import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse, ConnectionStatus, PromptConfigRequest, PromptConfigResponse, RetrievalConfigRequest, RetrievalConfigResponse, FeatureFlagsResponse, OtelToggleRequest, MemoryToggleRequest
+from schemas.system import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse, ConnectionStatus, PromptConfigRequest, PromptConfigResponse, RetrievalConfigRequest, RetrievalConfigResponse, ModelConfigRequest, ModelConfigResponse, FeatureFlagsResponse, OtelToggleRequest, MemoryToggleRequest
 from models.system_config import SystemConfig
 from milvus_client import get_collection, reinit_collection
 from redis_client import get_redis
@@ -181,6 +181,56 @@ async def save_retrieval_config(data: RetrievalConfigRequest, db: AsyncSession =
             db.add(SystemConfig(config_key=key, config_value=value, description=f"检索参数-{key}"))
     await db.commit()
     return {"message": "检索参数配置保存成功"}
+
+
+DEFAULT_CHAT_MODELS = ["qwen3-max", "glm-5.1", "deepseek-v4-pro"]
+
+
+@router.get("/model-config", response_model=ModelConfigResponse)
+async def get_model_config(db: AsyncSession = Depends(get_db)):
+    """返回 RAG 问答页可选模型列表，未配置时回退到默认列表。"""
+    import json
+
+    stmt = select(SystemConfig).where(SystemConfig.config_key == "chat.models")
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+    if row and row.config_value:
+        try:
+            models = json.loads(row.config_value)
+            if isinstance(models, list) and models:
+                return {"models": [str(m) for m in models]}
+        except (ValueError, TypeError):
+            pass
+    return {"models": DEFAULT_CHAT_MODELS}
+
+
+@router.post("/model-config")
+async def save_model_config(data: ModelConfigRequest, db: AsyncSession = Depends(get_db)):
+    """保存 RAG 问答页可选模型列表，至少保留一个模型。"""
+    import json
+
+    # 去空白、去空项、去重（保序）
+    seen: set[str] = set()
+    models: list[str] = []
+    for m in data.models:
+        name = m.strip()
+        if name and name not in seen:
+            seen.add(name)
+            models.append(name)
+
+    if not models:
+        raise HTTPException(status_code=400, detail="至少需要配置一个模型")
+
+    value = json.dumps(models, ensure_ascii=False)
+    stmt = select(SystemConfig).where(SystemConfig.config_key == "chat.models")
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+    if config:
+        config.config_value = value
+    else:
+        db.add(SystemConfig(config_key="chat.models", config_value=value, description="RAG问答可选模型列表"))
+    await db.commit()
+    return {"message": "模型配置保存成功", "models": models}
 
 
 @router.post("/reinit-collection")
