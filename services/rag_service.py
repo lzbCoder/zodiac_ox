@@ -9,6 +9,14 @@ from services.sparse_embedding import JiebaSparseEmbedding
 
 _sparse_encoder = JiebaSparseEmbedding()
 
+# Markdown 排版指令：追加到 system prompt，保证模型以结构化 Markdown 输出
+MARKDOWN_DIRECTIVE = (
+    "\n\n【输出格式要求】请始终使用 Markdown 格式组织回答："
+    "用 `##`/`###` 标题分层，用 `-` 或有序列表罗列要点，"
+    "关键术语用 `**加粗**`，代码、命令或字段名用反引号或 ``` 代码块包裹，"
+    "对比类信息使用表格，确保排版清晰、层次分明。"
+)
+
 async def search_vectors(
     collection: Collection,
     query: str,
@@ -107,6 +115,9 @@ async def generate_answer_stream(
                 "你是一个知识库问答助手。请根据提供的文档片段回答用户问题。"
                 "如果文档片段不足以回答问题，请如实说明。回答时请引用具体的来源。"
             )
+
+        # 始终追加 Markdown 排版要求，确保回答以结构化 Markdown 输出
+        system_prompt = system_prompt + MARKDOWN_DIRECTIVE
 
         if user_prompt_template is None:
             user_prompt = f"文档片段：\n{context_text}\n\n用户问题：{query}\n\n请根据以上文档片段回答问题："
