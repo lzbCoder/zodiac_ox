@@ -17,6 +17,14 @@ MARKDOWN_DIRECTIVE = (
     "对比类信息使用表格，确保排版清晰、层次分明。"
 )
 
+# 引用来源指令：要求模型在回答末尾单独列出来源，正文中不插入来源标识
+CITATION_DIRECTIVE = (
+    "\n\n【引用来源要求】正文中不要插入来源标识，也不要在开头说明来源；"
+    "请在回答全部结束后另起一行，先输出一行 `---` 分隔线，"
+    "再以 `**参考来源：**` 开头，用列表逐条列出你实际引用到的文档名称（重复的只列一次）。"
+    "若回答未引用任何文档，则不输出该来源小节。"
+)
+
 async def search_vectors(
     collection: Collection,
     query: str,
@@ -107,7 +115,7 @@ async def generate_answer_stream(
 
     try:
         context_text = "\n\n---\n\n".join(
-            f"[来源文档ID:{c['doc_id']}] {c['content']}" for c in context_chunks
+            f"[来源：{c.get('filename') or '未知文档'}] {c['content']}" for c in context_chunks
         )
 
         if system_prompt is None:
@@ -116,8 +124,8 @@ async def generate_answer_stream(
                 "如果文档片段不足以回答问题，请如实说明。回答时请引用具体的来源。"
             )
 
-        # 始终追加 Markdown 排版要求，确保回答以结构化 Markdown 输出
-        system_prompt = system_prompt + MARKDOWN_DIRECTIVE
+        # 始终追加 Markdown 排版要求 + 引用来源要求（来源统一列在回答末尾）
+        system_prompt = system_prompt + MARKDOWN_DIRECTIVE + CITATION_DIRECTIVE
 
         if user_prompt_template is None:
             user_prompt = f"文档片段：\n{context_text}\n\n用户问题：{query}\n\n请根据以上文档片段回答问题："

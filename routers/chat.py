@@ -71,6 +71,7 @@ async def _enrich_hits(db: AsyncSession, hits: list[dict]) -> tuple[list[dict], 
         if c:
             chunks_content.append({
                 "doc_id": doc_id,
+                "filename": doc.filename if doc else "未知文档",
                 "content": c.content,
                 "page_num": c.page_num,
             })

@@ -7,7 +7,7 @@ class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1)
     session_id: str | None = None
     user_id: str = Field(default="admin")  # 用户标识，用于长期记忆隔离
-    model_name: str = Field(default="qwen3-max", pattern="^(qwen3-max|glm-5.1|deepseek-v4-pro)$")
+    model_name: str = Field(default="qwen3-max")
     search_mode: str = Field(default="normal", pattern="^(normal|hybrid)$")
     message_id: int | None = None  # 若提供则更新已有消息，否则插入新消息
 
