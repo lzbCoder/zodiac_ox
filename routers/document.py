@@ -78,6 +78,13 @@ async def list_documents(
     return {"items": [DocumentResponse.model_validate(d) for d in docs], "total": total, "page": page, "page_size": page_size}
 
 
+@router.get("/file-types")
+async def list_file_types(db: AsyncSession = Depends(get_db)):
+    """获取所有已上传文档的文件类型（去重）。"""
+    types = await document_service.get_distinct_file_types(db)
+    return types
+
+
 @router.get("/{doc_id}", response_model=DocumentResponse)
 async def get_document(doc_id: int, db: AsyncSession = Depends(get_db)):
     doc = await document_service.get_document(db, doc_id)

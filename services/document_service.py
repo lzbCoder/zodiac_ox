@@ -141,6 +141,14 @@ async def save_chunks(db: AsyncSession, kb_id: int, doc_id: int, chunks: list[di
     return chunk_objs
 
 
+async def get_distinct_file_types(db: AsyncSession) -> list[str]:
+    """查询文档表中所有已出现的文件类型（去重）。"""
+    from sqlalchemy import select, func
+    stmt = select(Document.file_type).distinct().where(Document.is_deleted == False).order_by(Document.file_type)
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows)
+
+
 async def get_chunks_by_doc(db: AsyncSession, doc_id: int) -> list[DocumentChunk]:
     stmt = select(DocumentChunk).where(DocumentChunk.doc_id == doc_id).order_by(DocumentChunk.chunk_index)
     result = await db.execute(stmt)
