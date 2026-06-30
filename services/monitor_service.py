@@ -97,6 +97,7 @@ async def flush_traces(db: AsyncSession):
                         "prompt_tokens", "completion_tokens", "total_tokens",
                         "search_cost_ms", "llm_cost_ms", "total_cost_ms",
                         "llm_model", "feedback", "status",
+                        "system_prompt", "user_prompt",
                     ]:
                         val = data.get(field)
                         if val is not None:
@@ -119,6 +120,8 @@ async def flush_traces(db: AsyncSession):
                         llm_model=data.get("llm_model"),
                         feedback=data.get("feedback"),
                         status=data.get("status", "success"),
+                        system_prompt=data.get("system_prompt"),
+                        user_prompt=data.get("user_prompt"),
                     )
                     db.add(trace)
 
@@ -442,6 +445,8 @@ async def get_chat_detail(db: AsyncSession, chat_id: str) -> dict | None:
         "llm_model": trace.llm_model,
         "feedback": trace.feedback,
         "status": trace.status,
+        "system_prompt": trace.system_prompt,
+        "user_prompt": trace.user_prompt,
         "create_time": trace.create_time.isoformat() if trace.create_time else "",
         "chunks": [
             {

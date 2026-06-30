@@ -25,4 +25,6 @@ class ChatTrace(Base):
     llm_model: Mapped[str | None] = mapped_column(String(64))
     feedback: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="success")
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True, comment="系统提示词")
+    user_prompt: Mapped[str | None] = mapped_column(Text, nullable=True, comment="用户提示词")
     create_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

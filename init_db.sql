@@ -295,3 +295,9 @@ CREATE TABLE IF NOT EXISTS root.access_log (
 );
 CREATE INDEX IF NOT EXISTS idx_access_log_ip_time ON root.access_log(client_ip, create_time DESC);
 CREATE INDEX IF NOT EXISTS idx_access_log_time ON root.access_log(create_time DESC);
+
+-- ============================================
+-- 字段扩展：system_prompt / user_prompt
+-- ============================================
+ALTER TABLE root.chat_traces ADD COLUMN IF NOT EXISTS system_prompt TEXT;
+ALTER TABLE root.chat_traces ADD COLUMN IF NOT EXISTS user_prompt TEXT;

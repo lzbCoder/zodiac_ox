@@ -189,6 +189,7 @@ async def ask(data: ChatRequest, db: AsyncSession = Depends(get_db)):
         full_answer = ""
         token_count = 0
         llm_start = time.perf_counter()
+        llm_result = {}  # 收集 token 用量 / prompts
         try:
             # 7a. LLM流式调用
             try:
@@ -196,6 +197,7 @@ async def ask(data: ChatRequest, db: AsyncSession = Depends(get_db)):
                     data.query, chunks_content, data.model_name,
                     system_prompt=sys_prompt,
                     user_prompt_template=usr_prompt_template,
+                    _result=llm_result,
                 ):
                     full_answer += token
                     token_count += 1
@@ -210,16 +212,27 @@ async def ask(data: ChatRequest, db: AsyncSession = Depends(get_db)):
             llm_cost_ms = int((time.perf_counter() - llm_start) * 1000)
             total_cost_ms = int((time.perf_counter() - t_start) * 1000)
 
-            # 7b. 推送生成trace
+            # 取真实 token 用量（API 返回），fallback 到手动计数
+            prompt_tokens = llm_result.get("prompt_tokens", 0)
+            completion_tokens = llm_result.get("completion_tokens", 0) or token_count
+            total_tokens = llm_result.get("total_tokens", 0) or token_count
+
+            # 最终构建的 prompts
+            final_system_prompt = llm_result.get("system_prompt")
+            final_user_prompt = llm_result.get("user_prompt")
+
+            # 7b. 推送生成trace（含 prompts 和真实 token 用量）
             asyncio_create_task_safe(monitor_service.push_trace({
                 "chat_id": chat_id,
                 "answer": full_answer if status == "success" else None,
-                "prompt_tokens": 0,
-                "completion_tokens": token_count,
-                "total_tokens": token_count,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
                 "llm_cost_ms": llm_cost_ms,
                 "total_cost_ms": total_cost_ms,
                 "status": status,
+                "system_prompt": final_system_prompt,
+                "user_prompt": final_user_prompt,
             }))
 
             # 7c. 保存对话历史（chat_histories表）

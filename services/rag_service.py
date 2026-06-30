@@ -106,7 +106,14 @@ async def generate_answer_stream(
     model: str = "qwen3-max",
     system_prompt: str | None = None,
     user_prompt_template: str | None = None,
+    _result: dict | None = None,
 ) -> AsyncGenerator[str, None]:
+    """生成流式回答。
+
+    可通过 ``_result`` 传入可变 dict，在迭代结束后获取额外信息：
+    - ``prompt_tokens`` / ``completion_tokens`` / ``total_tokens``
+    - ``system_prompt`` / ``user_prompt``（最终构建后的完整文本）
+    """
     span = trace.get_tracer(__name__).start_span("llm_generate")
     span.set_attribute("model", model)
     span.set_attribute("context_chunks", len(context_chunks))
@@ -132,6 +139,11 @@ async def generate_answer_stream(
         else:
             user_prompt = user_prompt_template.replace("{context}", context_text).replace("{query}", query)
 
+        # 回传最终 prompts（供保存入库）
+        if _result is not None:
+            _result["system_prompt"] = system_prompt
+            _result["user_prompt"] = user_prompt
+
         client = AsyncOpenAI(
             api_key=DASHSCOPE_API_KEY,
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -144,13 +156,29 @@ async def generate_answer_stream(
                 {"role": "user", "content": user_prompt},
             ],
             stream=True,
+            stream_options={"include_usage": True},
         )
 
         token_count = 0
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
         async for chunk in stream:
+            # 部分 provider 在最后一个 chunk 中返回 usage（choices 为空）
             if chunk.choices and chunk.choices[0].delta.content:
                 token_count += 1
                 yield chunk.choices[0].delta.content
+            # OpenAI / DashScope 兼容：最后一条 usage chunk
+            if hasattr(chunk, "usage") and chunk.usage:
+                prompt_tokens = chunk.usage.prompt_tokens or 0
+                completion_tokens = chunk.usage.completion_tokens or 0
+                total_tokens = chunk.usage.total_tokens or 0
+
+        # 回传 token 用量
+        if _result is not None:
+            _result["prompt_tokens"] = prompt_tokens
+            _result["completion_tokens"] = completion_tokens if completion_tokens else token_count
+            _result["total_tokens"] = total_tokens if total_tokens else token_count
 
         span.set_attribute("token_count", token_count)
     finally:
