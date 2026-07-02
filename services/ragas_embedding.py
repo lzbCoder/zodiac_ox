@@ -2,10 +2,10 @@
 import asyncio
 from typing import Any
 from dashscope import TextEmbedding
-from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL
+from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL, EMBEDDING_BATCH_SIZE
 from ragas.embeddings.base import BaseRagasEmbedding
 
-BATCH_SIZE = 25  # DashScope 单次最大输入条数
+BATCH_SIZE = EMBEDDING_BATCH_SIZE
 
 
 class DashScopeRagasEmbedding(BaseRagasEmbedding):
@@ -32,7 +32,9 @@ class DashScopeRagasEmbedding(BaseRagasEmbedding):
                 for emb in resp.output["embeddings"]:
                     result.append(emb["embedding"])
             else:
-                result.extend([[0.0] * 1024] * len(batch))
+                raise RuntimeError(
+                    f"Embedding API failed (status={resp.status_code}) for batch starting at index {i}"
+                )
         return result
 
     async def aembed_text(self, text: str, **kwargs: Any) -> list[float]:

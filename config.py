@@ -37,6 +37,7 @@ if not DASHSCOPE_API_KEY:
     raise ValueError("DASHSCOPE_API_KEY 未设置，请在 .env 文件中配置")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-v4")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
+EMBEDDING_BATCH_SIZE = int(os.getenv("EMBEDDING_BATCH_SIZE", "10"))
 
 # Redis
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")

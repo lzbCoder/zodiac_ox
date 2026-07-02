@@ -2,14 +2,15 @@ import asyncio
 import uuid
 from typing import TYPE_CHECKING
 from dashscope import TextEmbedding
-from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM
+from loguru import logger
+from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_BATCH_SIZE
 from services.sparse_embedding import JiebaSparseEmbedding
 
 if TYPE_CHECKING:
     from pymilvus import Collection
 
 _sparse_encoder = JiebaSparseEmbedding()
-BATCH_SIZE = 25  # DashScope text-embedding-v4 单次最大输入条数
+BATCH_SIZE = EMBEDDING_BATCH_SIZE
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
@@ -31,7 +32,17 @@ def _embed_texts_sync(texts: list[str]) -> list[list[float]]:
             for emb in resp.output["embeddings"]:
                 result.append(emb["embedding"])
         else:
-            result.extend([[0.0] * EMBEDDING_DIM] * len(batch))
+            err_msg = getattr(resp, "message", "unknown")
+            err_code = getattr(resp, "code", "")
+            logger.error(
+                "DashScope Embedding API failed "
+                "(status={}, code={}, message={}, batch_start={})",
+                resp.status_code, err_code, err_msg, i,
+            )
+            raise RuntimeError(
+                f"Embedding API failed (status={resp.status_code}, code={err_code}, "
+                f"message={err_msg}) for batch starting at index {i}"
+            )
     return result
 
 

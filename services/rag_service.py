@@ -4,7 +4,7 @@ from pymilvus import Collection, AnnSearchRequest, RRFRanker
 from dashscope import TextEmbedding
 from openai import AsyncOpenAI
 from opentelemetry import trace, context as otel_context
-from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL
+from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM
 from services.sparse_embedding import JiebaSparseEmbedding
 
 _sparse_encoder = JiebaSparseEmbedding()
@@ -46,6 +46,7 @@ async def search_vectors(
             api_key=DASHSCOPE_API_KEY,
             model=EMBEDDING_MODEL,
             input=query[:2048],
+            dimensions=EMBEDDING_DIM,
         )
         if resp.status_code != 200:
             span.set_attribute("error", True)
@@ -89,12 +90,19 @@ async def search_vectors(
 
         hits = []
         for hit in results[0]:
+            raw_score = hit.score
+            # 普通搜索 (COSINE)：hit.score 就是余弦相似度 [-1, 1]，越高越相似
+            # 混合搜索 (RRF)：hit.score 是 RRF 排名融合分，已"越高越好"
+            if search_mode != "hybrid":
+                score = max(0.0, raw_score)  # 负相似度（不相关）截断为 0
+            else:
+                score = raw_score
             hits.append({
                 "id": hit.id,
                 "doc_id": hit.entity.get("doc_id"),
                 "chunk_id": hit.entity.get("chunk_id"),
                 "kb_id": hit.entity.get("kb_id"),
-                "score": hit.score,
+                "score": score,
             })
         span.set_attribute("retrieved_count", len(hits))
         return hits[:final_top_k]
