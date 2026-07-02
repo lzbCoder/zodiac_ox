@@ -6,8 +6,27 @@ from sqlalchemy.orm import DeclarativeBase
 from config import DATABASE_URL
 from loguru import logger
 
-engine = create_async_engine(DATABASE_URL, pool_size=10, max_overflow=20, echo=False)
+engine = create_async_engine(
+    DATABASE_URL,
+    pool_size=20,
+    max_overflow=20,
+    pool_pre_ping=True,   # 每次从池中取连接前执行 SELECT 1 健康检查
+    pool_recycle=3600,    # 连接使用超过 1 小时后自动回收，防止服务端断开
+    echo=False,
+)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+# 评测任务专用连接池 — 与常规业务隔离，避免 RAGAS 拖慢 API 响应
+eval_engine = create_async_engine(
+    DATABASE_URL,
+    pool_size=20,
+    max_overflow=30,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_timeout=120,
+    echo=False,
+)
+async_eval_session = async_sessionmaker(eval_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):

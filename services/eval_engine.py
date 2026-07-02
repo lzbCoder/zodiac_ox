@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from sqlalchemy import select, func, update, or_, and_
 from loguru import logger
-from database import async_session
+from database import async_eval_session
 from milvus_client import get_collection
 from models.rag_eval_task import RagEvalTask
 from models.rag_eval_question import RagEvalQuestion
@@ -121,7 +121,7 @@ async def run_evaluation(task_id: int):
     start_time = time.perf_counter()
     _cancel_flags.pop(task_id, None)  # 清除旧标志
 
-    async with async_session() as db:
+    async with async_eval_session() as db:
         try:
             task = await db.get(RagEvalTask, task_id)
             if not task:
@@ -213,7 +213,7 @@ async def run_evaluation(task_id: int):
                         ragas = None
                         if task.enable_ragas:
                             try:
-                                async with async_session() as ragas_db:
+                                async with async_eval_session() as ragas_db:
                                     ragas = await evaluate_ragas(
                                         db=ragas_db,
                                         query=q.query,
@@ -246,7 +246,7 @@ async def run_evaluation(task_id: int):
                         }
 
                         # 提交结果到独立会话
-                        async with async_session() as result_db:
+                        async with async_eval_session() as result_db:
                             result = RagEvalResult(**result_data)
                             result_db.add(result)
                             await result_db.commit()
@@ -262,7 +262,7 @@ async def run_evaluation(task_id: int):
                         pct = int(completed / total * 100)
                         if pct % 10 == 0 or completed == total:
                             try:
-                                async with async_session() as prog_db:
+                                async with async_eval_session() as prog_db:
                                     await prog_db.execute(
                                         update(RagEvalTask)
                                         .where(RagEvalTask.id == task_id)
@@ -280,7 +280,7 @@ async def run_evaluation(task_id: int):
 
             # 检查是否被取消
             if _cancel_flags.get(task_id):
-                async with async_session() as final_db:
+                async with async_eval_session() as final_db:
                     t = await final_db.get(RagEvalTask, task_id)
                     if t:
                         t.status = "cancelled"
