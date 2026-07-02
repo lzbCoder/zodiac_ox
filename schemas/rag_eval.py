@@ -19,6 +19,7 @@ class RagEvalDatasetUpdate(BaseModel):
 class RagEvalDatasetResponse(BaseModel):
     id: int
     kb_id: int
+    kb_name: str = ""
     name: str
     description: str | None = None
     total_questions: int = 0

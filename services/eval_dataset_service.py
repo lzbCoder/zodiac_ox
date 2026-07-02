@@ -2,6 +2,7 @@ from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.rag_eval_dataset import RagEvalDataset
 from models.rag_eval_question import RagEvalQuestion
+from models.knowledge_base import KnowledgeBase
 
 
 async def create_dataset(db: AsyncSession, kb_id: int, name: str, description: str | None = None, created_by: str | None = None) -> RagEvalDataset:
@@ -22,12 +23,32 @@ async def list_datasets(db: AsyncSession, kb_id: int | None = None, page: int = 
 
     stmt = base.order_by(RagEvalDataset.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
     rows = (await db.execute(stmt)).scalars().all()
+
+    # 批量补充知识库名称
+    await _attach_kb_names(db, rows)
+
     return list(rows), total
 
 
 async def get_dataset(db: AsyncSession, dataset_id: int) -> RagEvalDataset | None:
     stmt = select(RagEvalDataset).where(RagEvalDataset.id == dataset_id, RagEvalDataset.is_deleted == False)
-    return (await db.execute(stmt)).scalar_one_or_none()
+    ds = (await db.execute(stmt)).scalar_one_or_none()
+    if ds:
+        await _attach_kb_names(db, [ds])
+    return ds
+
+
+async def _attach_kb_names(db: AsyncSession, datasets: list[RagEvalDataset]):
+    """批量查询知识库名称并附加到 dataset 对象上。"""
+    kb_ids = list({d.kb_id for d in datasets if d.kb_id})
+    if not kb_ids:
+        return
+    kb_stmt = select(KnowledgeBase.id, KnowledgeBase.name).where(
+        KnowledgeBase.id.in_(kb_ids), KnowledgeBase.is_deleted == False
+    )
+    kb_map = {row.id: row.name for row in (await db.execute(kb_stmt)).all()}
+    for d in datasets:
+        d.kb_name = kb_map.get(d.kb_id, "未知")
 
 
 async def update_dataset(db: AsyncSession, dataset_id: int, name: str | None = None, description: str | None = None) -> RagEvalDataset | None:
