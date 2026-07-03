@@ -163,18 +163,7 @@ CREATE TABLE IF NOT EXISTS root.rag_eval_results (
 CREATE INDEX IF NOT EXISTS idx_rag_eval_results_task_id ON root.rag_eval_results(task_id);
 CREATE INDEX IF NOT EXISTS idx_rag_eval_results_qid ON root.rag_eval_results(qid);
 
--- 11. 评测配置表
-CREATE TABLE IF NOT EXISTS root.rag_eval_configs (
-    id SERIAL PRIMARY KEY,
-    kb_id INT UNIQUE NOT NULL,
-    default_top_k INT DEFAULT 5,
-    default_retriever_mode VARCHAR(20) DEFAULT 'normal',
-    updated_at TIMESTAMP DEFAULT NOW(),
-    FOREIGN KEY (kb_id) REFERENCES root.knowledge_bases(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_rag_eval_configs_kb_id ON root.rag_eval_configs(kb_id);
-
--- 12. 标注任务表
+-- 11. 标注任务表
 CREATE TABLE IF NOT EXISTS root.rag_eval_label_tasks (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
@@ -190,7 +179,7 @@ CREATE TABLE IF NOT EXISTS root.rag_eval_label_tasks (
 CREATE INDEX IF NOT EXISTS idx_rag_eval_label_tasks_kb_id ON root.rag_eval_label_tasks(kb_id);
 CREATE INDEX IF NOT EXISTS idx_rag_eval_label_tasks_status ON root.rag_eval_label_tasks(status);
 
--- 13. 标注详情表
+-- 12. 标注详情表
 CREATE TABLE IF NOT EXISTS root.rag_eval_label_details (
     id SERIAL PRIMARY KEY,
     task_id INT NOT NULL,
@@ -236,7 +225,7 @@ ALTER TABLE root.rag_eval_results ADD COLUMN IF NOT EXISTS answer_relevancy REAL
 -- RAG监控模块 — 2张埋点表
 -- ============================================
 
--- 14. 对话埋点主表
+-- 13. 对话埋点主表
 CREATE TABLE IF NOT EXISTS root.chat_traces (
     id BIGSERIAL PRIMARY KEY,
     chat_id VARCHAR(64) NOT NULL,
@@ -261,7 +250,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_traces_chat_id ON root.chat_traces(chat_id);
 CREATE INDEX IF NOT EXISTS idx_chat_traces_create_time ON root.chat_traces(create_time);
 CREATE INDEX IF NOT EXISTS idx_chat_traces_kb_id ON root.chat_traces(kb_id);
 
--- 15. 检索分块明细表
+-- 14. 检索分块明细表
 CREATE TABLE IF NOT EXISTS root.chat_chunk_details (
     id BIGSERIAL PRIMARY KEY,
     chat_id VARCHAR(64) NOT NULL,
@@ -279,7 +268,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_chunk_details_chunk_id ON root.chat_chunk_de
 -- 按 IP/会话首次去重写入（30 分钟窗口），详见 services/access_log_service.py
 -- ============================================
 
--- 16. 访问记录表
+-- 15. 访问记录表
 CREATE TABLE IF NOT EXISTS root.access_log (
     id          BIGSERIAL PRIMARY KEY,
     client_ip   VARCHAR(64),

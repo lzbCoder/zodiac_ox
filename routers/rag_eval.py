@@ -8,12 +8,11 @@ from schemas.rag_eval import (
     RagEvalQuestionResponse,
     RagEvalTaskCreate, RagEvalTaskResponse, RagEvalTaskUpdate,
     RagEvalResultResponse, RagEvalReportData,
-    RagEvalConfigUpdate, RagEvalConfigResponse,
     RagEvalLabelTaskCreate, RagEvalLabelTaskUpdate, RagEvalLabelTaskResponse,
     RagEvalLabelDetailResponse, RagEvalLabelDetailSave, RagEvalLabelBatchSave,
     ChunkCandidatesResponse, LabelExportResponse,
 )
-from services import eval_dataset_service, eval_import_service, eval_config_service, eval_task_service, eval_engine, eval_label_service
+from services import eval_dataset_service, eval_import_service, eval_task_service, eval_engine, eval_label_service
 
 router = APIRouter(prefix="/api/rag/eval", tags=["RAG评测中心"])
 
@@ -128,10 +127,9 @@ async def create_task(data: RagEvalTaskCreate, db: AsyncSession = Depends(get_db
         if not ds:
             raise HTTPException(status_code=404, detail="评测集不存在")
 
-    # Fill defaults from KB config
-    config = await eval_config_service.get_or_create_config(db, data.kb_id)
-    top_k = data.top_k if data.top_k != 5 else config.default_top_k
-    retriever_mode = data.retriever_mode if data.retriever_mode != "normal" else config.default_retriever_mode
+    # Use raw values from request (no KB-level defaults)
+    top_k = data.top_k
+    retriever_mode = data.retriever_mode
 
     # Auto-fill RAGAS model defaults from system config if not specified
     from cache.model_config_cache import get_ragas_default_answer_model, get_ragas_default_eval_model
@@ -268,18 +266,6 @@ async def list_completed_reports(
 ):
     items, total = await eval_task_service.get_completed_tasks(db, kb_id, page, page_size)
     return {"items": [RagEvalTaskResponse.model_validate(t) for t in items], "total": total, "page": page, "page_size": page_size}
-
-
-# ── Config ─────────────────────────────────────────────
-
-@router.get("/configs/{kb_id}", response_model=RagEvalConfigResponse)
-async def get_config(kb_id: int, db: AsyncSession = Depends(get_db)):
-    return await eval_config_service.get_or_create_config(db, kb_id)
-
-
-@router.put("/configs/{kb_id}", response_model=RagEvalConfigResponse)
-async def update_config(kb_id: int, data: RagEvalConfigUpdate, db: AsyncSession = Depends(get_db)):
-    return await eval_config_service.update_config(db, kb_id, data.default_top_k, data.default_retriever_mode)
 
 
 # ══════════════════════════════════════════════════════════

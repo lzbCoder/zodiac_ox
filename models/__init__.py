@@ -8,7 +8,6 @@ from .rag_eval_dataset import RagEvalDataset
 from .rag_eval_question import RagEvalQuestion
 from .rag_eval_task import RagEvalTask
 from .rag_eval_result import RagEvalResult
-from .rag_eval_config import RagEvalConfig
 from .rag_eval_label_task import RagEvalLabelTask
 from .rag_eval_label_detail import RagEvalLabelDetail
 from .chat_trace import ChatTrace

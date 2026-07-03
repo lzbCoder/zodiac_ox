@@ -150,23 +150,6 @@ class RagEvalReportData(BaseModel):
     results: list[RagEvalResultResponse]
 
 
-# ── Config ───────────────────────────────────────────────
-
-class RagEvalConfigUpdate(BaseModel):
-    default_top_k: int | None = Field(default=None, ge=1, le=100)
-    default_retriever_mode: str | None = None
-
-
-class RagEvalConfigResponse(BaseModel):
-    id: int
-    kb_id: int
-    default_top_k: int = 5
-    default_retriever_mode: str = "normal"
-    updated_at: datetime | None = None
-
-    model_config = {"from_attributes": True}
-
-
 # ── Label Task ────────────────────────────────────────────
 
 class LabelQueryItem(BaseModel):
