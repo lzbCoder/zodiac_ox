@@ -142,7 +142,7 @@ async def _load_questions_for_task(db, task: RagEvalTask) -> list[EvalQuestion]:
 # ── 子函数：单题处理（内嵌工厂）────────────────────────────
 
 def _make_process_one(
-    task_id: int, task: RagEvalTask, collection, db, *,
+    task_id: int, task: RagEvalTask, collection, *,
     total: int, sem: asyncio.Semaphore, completed: list, progress_lock: asyncio.Lock,
 ):
     """创建单题处理协程的工厂函数。
@@ -187,7 +187,7 @@ def _make_process_one(
                 # 3. RAGAS 生成评测（跑在独立线程，不阻塞事件循环）
                 ragas = None
                 if task.enable_ragas and retrieved_chunk_ids:
-                    ragas = await _run_ragas_eval(q, retrieved_chunk_ids, task, db)
+                    ragas = await _run_ragas_eval(q, retrieved_chunk_ids, task)
 
                 # 4. 组装结果数据
                 result_data = {
@@ -230,13 +230,18 @@ def _make_process_one(
 
 
 async def _run_ragas_eval(
-    q: EvalQuestion, chunk_ids: list[int], task: RagEvalTask, db,
+    q: EvalQuestion, chunk_ids: list[int], task: RagEvalTask,
 ) -> dict | None:
-    """RAGAS 评测：异步预取 chunk 文本后，丢到线程中执行 sync 评分。"""
+    """RAGAS 评测：用独立 DB 会话预取 chunk 文本后，丢到线程中执行 sync 评分。
+
+    使用独立会话（async_eval_session）而非共享 db，防止 RAGAS 耗时 60s+
+    期间连接被空闲超时断开，导致共享会话损坏、连锁崩溃。
+    """
     try:
-        chunk_stmt = select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids))
-        chunk_rows = (await db.execute(chunk_stmt)).scalars().all()
-        context_texts = [c.content for c in chunk_rows]
+        async with async_eval_session() as local_db:
+            chunk_stmt = select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids))
+            chunk_rows = (await local_db.execute(chunk_stmt)).scalars().all()
+            context_texts = [c.content for c in chunk_rows]
 
         return await asyncio.to_thread(
             evaluate_ragas_sync,
@@ -314,67 +319,77 @@ async def _aggregate_ragas_scores(db, task_id: int) -> dict:
 # ── 主函数 ──────────────────────────────────────────────
 
 async def run_evaluation(task_id: int):
-    """后台运行评测。并行处理问题（Semaphore=5），各阶段拆分到子函数。"""
-    start_time = time.perf_counter()
-    _cancel_flags.pop(task_id, None)  # 清除旧取消标志
+    """后台运行评测。并行处理问题（Semaphore=5），各阶段拆分到子函数。
 
+    阶段 1-2 用一个短生命周期 db 会话（毫秒级），阶段 3 不持有任何数据库
+    连接（期间可能长达数分钟），阶段 4-6 重新获取会话回写最终结果。
+    这样避免了在 RAGAS 评测期间数据库连接空闲超时被服务端断开的问题。
+    """
+    start_time = time.perf_counter()
+    _cancel_flags.pop(task_id, None)
+
+    # ── 阶段 1+2：加载任务 & 问题（短会话，不跨阶段 3）──
+    async with async_eval_session() as db:
+        task = await db.get(RagEvalTask, task_id)
+        if not task:
+            logger.error(f"Eval task {task_id} not found")
+            return
+        if task.status == "cancelled":
+            return
+
+        task.status = "running"
+        await db.commit()
+
+        questions = await _load_questions_for_task(db, task)
+        if not questions:
+            task.status = "failed"
+            await db.commit()
+            logger.warning(f"Eval task {task_id}: no questions available")
+            return
+
+        total = len(questions)
+        logger.info(
+            f"Eval task {task_id}: starting with {total} questions, "
+            f"top_k={task.top_k}, mode={task.retriever_mode}, "
+            f"ragas={task.enable_ragas}, concurrency={MAX_CONCURRENCY}, "
+            f"type={task.task_type}"
+        )
+
+    # ── 阶段 3：并行评分（不持有 db 连接，可长达数分钟）──
+    collection = get_collection()
+    collection.load()
+
+    sem = asyncio.Semaphore(MAX_CONCURRENCY)
+    completed = [0]
+    progress_lock = asyncio.Lock()
+
+    process_one = _make_process_one(
+        task_id, task, collection,
+        total=total, sem=sem, completed=completed, progress_lock=progress_lock,
+    )
+
+    coros = [process_one(q) for q in questions]
+    raw = await asyncio.gather(*coros)
+
+    # ── 阶段 4：检查取消（独立会话）──
+    if _cancel_flags.get(task_id):
+        async with async_eval_session() as final_db:
+            t = await final_db.get(RagEvalTask, task_id)
+            if t:
+                t.status = "cancelled"
+                t.finished_at = datetime.now()
+                await final_db.commit()
+        logger.info(f"Eval task {task_id}: cancelled")
+        return
+
+    # ── 阶段 5+6：汇总指标 & 回写（全新会话，不用被阶段 3 拖死的旧连接）──
     async with async_eval_session() as db:
         try:
-            # ── 阶段 1：加载任务 & 校验 ──
             task = await db.get(RagEvalTask, task_id)
             if not task:
-                logger.error(f"Eval task {task_id} not found")
-                return
-            if task.status == "cancelled":
+                logger.error(f"Eval task {task_id} disappeared")
                 return
 
-            task.status = "running"
-            await db.commit()
-
-            # ── 阶段 2：加载问题列表 ──
-            questions = await _load_questions_for_task(db, task)
-            if not questions:
-                task.status = "failed"
-                await db.commit()
-                logger.warning(f"Eval task {task_id}: no questions available")
-                return
-
-            total = len(questions)
-            logger.info(
-                f"Eval task {task_id}: starting with {total} questions, "
-                f"top_k={task.top_k}, mode={task.retriever_mode}, "
-                f"ragas={task.enable_ragas}, concurrency={MAX_CONCURRENCY}, "
-                f"type={task.task_type}"
-            )
-
-            # ── 阶段 3：并行评分 ──
-            collection = get_collection()
-            collection.load()
-
-            sem = asyncio.Semaphore(MAX_CONCURRENCY)
-            completed = [0]  # 用 list 模拟 nonlocal，供 _make_process_one 使用
-            progress_lock = asyncio.Lock()
-
-            process_one = _make_process_one(
-                task_id, task, collection, db,
-                total=total, sem=sem, completed=completed, progress_lock=progress_lock,
-            )
-
-            coros = [process_one(q) for q in questions]
-            raw = await asyncio.gather(*coros)
-
-            # ── 阶段 4：检查取消 ──
-            if _cancel_flags.get(task_id):
-                async with async_eval_session() as final_db:
-                    t = await final_db.get(RagEvalTask, task_id)
-                    if t:
-                        t.status = "cancelled"
-                        t.finished_at = datetime.now()
-                        await final_db.commit()
-                logger.info(f"Eval task {task_id}: cancelled")
-                return
-
-            # ── 阶段 5：汇总指标 → 回写任务 ──
             agg = _aggregate_retrieval_metrics(raw)
             task.recall = agg["recall"]
             task.precision = agg["precision"]
@@ -386,7 +401,6 @@ async def run_evaluation(task_id: int):
                 for key, val in ragas_scores.items():
                     setattr(task, key, val)
 
-            # ── 阶段 6：完成 ──
             task.status = "completed"
             task.progress = 100
             task.cost_seconds = round(time.perf_counter() - start_time, 1)
