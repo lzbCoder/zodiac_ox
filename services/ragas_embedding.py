@@ -2,7 +2,8 @@
 import asyncio
 from typing import Any
 from dashscope import TextEmbedding
-from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL, EMBEDDING_BATCH_SIZE
+from config import DASHSCOPE_API_KEY, EMBEDDING_BATCH_SIZE
+from cache.model_config_cache import get_embedding_model
 from ragas.embeddings.base import BaseRagasEmbedding
 
 BATCH_SIZE = EMBEDDING_BATCH_SIZE
@@ -25,7 +26,7 @@ class DashScopeRagasEmbedding(BaseRagasEmbedding):
             batch = texts[i:i + BATCH_SIZE]
             resp = TextEmbedding.call(
                 api_key=DASHSCOPE_API_KEY,
-                model=EMBEDDING_MODEL,
+                model=get_embedding_model(),
                 input=[t[:2048] for t in batch],
             )
             if resp.status_code == 200:

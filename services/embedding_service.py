@@ -3,7 +3,8 @@ import uuid
 from typing import TYPE_CHECKING
 from dashscope import TextEmbedding
 from loguru import logger
-from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_BATCH_SIZE
+from config import DASHSCOPE_API_KEY, EMBEDDING_DIM, EMBEDDING_BATCH_SIZE
+from cache.model_config_cache import get_embedding_model
 from services.sparse_embedding import JiebaSparseEmbedding
 
 if TYPE_CHECKING:
@@ -24,7 +25,7 @@ def _embed_texts_sync(texts: list[str]) -> list[list[float]]:
         batch = texts[i:i + BATCH_SIZE]
         resp = TextEmbedding.call(
             api_key=DASHSCOPE_API_KEY,
-            model=EMBEDDING_MODEL,
+            model=get_embedding_model(),
             input=[t[:2048] for t in batch],
             dimensions=EMBEDDING_DIM,
         )

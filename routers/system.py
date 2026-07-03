@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db, engine
-from schemas.system import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse, ConnectionStatus, PromptConfigRequest, PromptConfigResponse, RetrievalConfigRequest, RetrievalConfigResponse, ModelConfigRequest, ModelConfigResponse, FeatureFlagsResponse, OtelToggleRequest, MemoryToggleRequest
+from schemas.system import SystemConfigCreate, SystemConfigUpdate, SystemConfigResponse, ConnectionStatus, PromptConfigRequest, PromptConfigResponse, RetrievalConfigRequest, RetrievalConfigResponse, ModelConfigRequest, ModelConfigResponse, FeatureFlagsResponse, OtelToggleRequest, MemoryToggleRequest, EmbeddingModelSaveRequest, RagasModelsSaveRequest, AllModelConfigResponse
 from models.system_config import SystemConfig
 from milvus_client import get_collection, reinit_collection
 from redis_client import get_redis
 from pymilvus import utility
-from config import MILVUS_COLLECTION
+from config import MILVUS_COLLECTION, EMBEDDING_MODEL
+from cache.model_config_cache import set_embedding_model_cache, set_ragas_cache
 
 router = APIRouter(prefix="/api/system", tags=["系统设置"])
 
@@ -231,6 +232,117 @@ async def save_model_config(data: ModelConfigRequest, db: AsyncSession = Depends
         db.add(SystemConfig(config_key="chat.models", config_value=value, description="RAG问答可选模型列表"))
     await db.commit()
     return {"message": "模型配置保存成功", "models": models}
+
+
+# ── 模型配置（多分类）──
+
+DEFAULT_EMBEDDING_MODEL = EMBEDDING_MODEL  # 来自 config.py env var
+DEFAULT_RAGAS_ANSWER_MODELS = ["qwen3-max"]
+DEFAULT_RAGAS_EVAL_MODELS = ["qwen3.6-flash"]
+
+
+def _parse_json_array(value: str | None) -> list[str] | None:
+    """安全解析 JSON 字符串数组。失败返回 None。"""
+    import json
+    if not value:
+        return None
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+            return parsed
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+async def _clean_and_save_models(
+    db: AsyncSession, config_key: str, models: list[str], description: str,
+) -> list[str]:
+    """清理、去重、保存模型列表到 system_configs。返回清洗后的列表。"""
+    import json
+
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for m in models:
+        name = m.strip()
+        if name and name not in seen:
+            seen.add(name)
+            cleaned.append(name)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="至少需要配置一个模型")
+
+    value = json.dumps(cleaned, ensure_ascii=False)
+    stmt = select(SystemConfig).where(SystemConfig.config_key == config_key)
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+    if config:
+        config.config_value = value
+    else:
+        db.add(SystemConfig(config_key=config_key, config_value=value, description=description))
+    await db.commit()
+    return cleaned
+
+
+@router.get("/model-config/all", response_model=AllModelConfigResponse)
+async def get_all_model_config(db: AsyncSession = Depends(get_db)):
+    """返回全部模型配置：问答模型、向量模型、RAGAS 答案/评分模型。"""
+    stmt = select(SystemConfig).where(SystemConfig.config_key.in_([
+        "chat.models", "embedding.model",
+        "ragas.answer_models", "ragas.eval_models",
+    ]))
+    result = await db.execute(stmt)
+    rows = {r.config_key: r.config_value for r in result.scalars().all()}
+
+    chat_models = _parse_json_array(rows.get("chat.models")) or DEFAULT_CHAT_MODELS
+    embedding_model = (rows.get("embedding.model") or "").strip() or DEFAULT_EMBEDDING_MODEL
+    ragas_answer = _parse_json_array(rows.get("ragas.answer_models")) or DEFAULT_RAGAS_ANSWER_MODELS
+    ragas_eval = _parse_json_array(rows.get("ragas.eval_models")) or DEFAULT_RAGAS_EVAL_MODELS
+
+    return AllModelConfigResponse(
+        chat_models=chat_models,
+        embedding_model=embedding_model,
+        ragas_answer_models=ragas_answer,
+        ragas_eval_models=ragas_eval,
+    )
+
+
+@router.post("/model-config/chat")
+async def save_chat_models(data: ModelConfigRequest, db: AsyncSession = Depends(get_db)):
+    cleaned = await _clean_and_save_models(db, "chat.models", data.models, "RAG问答可选模型列表")
+    return {"message": "Chat模型配置保存成功", "models": cleaned}
+
+
+@router.post("/model-config/embedding")
+async def save_embedding_model(data: EmbeddingModelSaveRequest, db: AsyncSession = Depends(get_db)):
+    model = data.model.strip()
+    if not model:
+        raise HTTPException(status_code=400, detail="向量模型名称不能为空")
+
+    stmt = select(SystemConfig).where(SystemConfig.config_key == "embedding.model")
+    result = await db.execute(stmt)
+    config = result.scalar_one_or_none()
+    if config:
+        config.config_value = model
+    else:
+        db.add(SystemConfig(config_key="embedding.model", config_value=model,
+                           description="文档分片向量模型(Embedding)"))
+    await db.commit()
+
+    set_embedding_model_cache(model)
+    return {"message": "向量模型配置保存成功", "model": model}
+
+
+@router.post("/model-config/ragas")
+async def save_ragas_models(data: RagasModelsSaveRequest, db: AsyncSession = Depends(get_db)):
+    answer_models = await _clean_and_save_models(
+        db, "ragas.answer_models", data.answer_models, "RAGAS评测-答案生成模型列表",
+    )
+    eval_models = await _clean_and_save_models(
+        db, "ragas.eval_models", data.eval_models, "RAGAS评测-评分模型列表",
+    )
+
+    set_ragas_cache(answer_models, eval_models)
+    return {"message": "RAGAS模型配置保存成功"}
 
 
 @router.post("/reinit-collection")

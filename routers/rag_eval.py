@@ -133,9 +133,14 @@ async def create_task(data: RagEvalTaskCreate, db: AsyncSession = Depends(get_db
     top_k = data.top_k if data.top_k != 5 else config.default_top_k
     retriever_mode = data.retriever_mode if data.retriever_mode != "normal" else config.default_retriever_mode
 
+    # Auto-fill RAGAS model defaults from system config if not specified
+    from cache.model_config_cache import get_ragas_default_answer_model, get_ragas_default_eval_model
+    model_name = data.model_name or get_ragas_default_answer_model()
+    eval_model = data.eval_model or get_ragas_default_eval_model()
+
     return await eval_task_service.create_task(
         db, data.name, data.dataset_id, data.kb_id, top_k, retriever_mode,
-        data.model_name, data.enable_ragas, data.eval_model,
+        model_name, data.enable_ragas, eval_model,
         task_type=data.task_type,
         sample_time_start=data.sample_time_start,
         sample_time_end=data.sample_time_end,

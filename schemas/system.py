@@ -70,3 +70,21 @@ class OtelToggleRequest(BaseModel):
 
 class MemoryToggleRequest(BaseModel):
     memory_enabled: bool
+
+
+# ── 模型配置（多分类）──
+
+class EmbeddingModelSaveRequest(BaseModel):
+    model: str
+
+
+class RagasModelsSaveRequest(BaseModel):
+    answer_models: list[str]
+    eval_models: list[str]
+
+
+class AllModelConfigResponse(BaseModel):
+    chat_models: list[str]
+    embedding_model: str
+    ragas_answer_models: list[str]
+    ragas_eval_models: list[str]

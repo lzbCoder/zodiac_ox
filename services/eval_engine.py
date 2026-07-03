@@ -243,13 +243,15 @@ async def _run_ragas_eval(
             chunk_rows = (await local_db.execute(chunk_stmt)).scalars().all()
             context_texts = [c.content for c in chunk_rows]
 
+        from cache.model_config_cache import get_ragas_default_answer_model, get_ragas_default_eval_model
+
         return await asyncio.to_thread(
             evaluate_ragas_sync,
             q.query,
             q.standard_answer,
             context_texts,
-            task.model_name or "qwen3-max",
-            task.eval_model or "qwen3.6-flash",
+            task.model_name or get_ragas_default_answer_model(),
+            task.eval_model or get_ragas_default_eval_model(),
         )
     except Exception as e:
         logger.error(f"RAGAS eval failed for q{q.source_id}: {e}")

@@ -4,7 +4,8 @@ from pymilvus import Collection, AnnSearchRequest, RRFRanker
 from dashscope import TextEmbedding
 from openai import AsyncOpenAI
 from opentelemetry import trace, context as otel_context
-from config import DASHSCOPE_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM
+from config import DASHSCOPE_API_KEY, EMBEDDING_DIM
+from cache.model_config_cache import get_embedding_model
 from services.sparse_embedding import JiebaSparseEmbedding
 
 _sparse_encoder = JiebaSparseEmbedding()
@@ -44,7 +45,7 @@ async def search_vectors(
         resp = await asyncio.to_thread(
             TextEmbedding.call,
             api_key=DASHSCOPE_API_KEY,
-            model=EMBEDDING_MODEL,
+            model=get_embedding_model(),
             input=query[:2048],
             dimensions=EMBEDDING_DIM,
         )

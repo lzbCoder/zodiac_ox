@@ -58,6 +58,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Redis init skipped: {e}")
 
+    # Seed model config cache from DB (runs in thread executor for sync psycopg2)
+    try:
+        from cache.model_config_cache import init_model_cache_from_db_sync
+        await asyncio.get_running_loop().run_in_executor(None, init_model_cache_from_db_sync)
+        logger.info("Model config cache seeded from DB")
+    except Exception as e:
+        logger.warning(f"Model config cache seeding skipped: {e}")
+
     # Start background flush task
     flush_task = asyncio.create_task(_periodic_flush())
 

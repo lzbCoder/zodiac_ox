@@ -33,7 +33,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from config import (
     DASHSCOPE_API_KEY,
     EMBEDDING_DIM,
-    EMBEDDING_MODEL,
     MEMORY_DEFAULT_USER_ID,
     SESSION_MEMORY_TOKEN_LIMIT,
     USER_MEMORY_TOKEN_LIMIT,
@@ -42,6 +41,7 @@ from config import (
     MILVUS_TOKEN,
     MILVUS_URI,
 )
+from cache.model_config_cache import get_embedding_model
 
 
 class EnterpriseMemoryManager:
@@ -61,7 +61,7 @@ class EnterpriseMemoryManager:
 
         # 共享嵌入模型
         self._embed_model = DashScopeEmbedding(
-            model_name=EMBEDDING_MODEL,
+            model_name=get_embedding_model(),
             api_key=DASHSCOPE_API_KEY,
         )
 
