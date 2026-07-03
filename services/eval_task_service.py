@@ -93,6 +93,27 @@ async def get_task(db: AsyncSession, task_id: int) -> RagEvalTask | None:
     return None
 
 
+async def update_task(db: AsyncSession, task_id: int, name: str) -> RagEvalTask | None:
+    """更新评测任务名称（仅允许修改 name）。"""
+    task = await db.get(RagEvalTask, task_id)
+    if not task:
+        return None
+    task.name = name
+    await db.commit()
+    await db.refresh(task)
+
+    # Attach names for response
+    if task.dataset_id:
+        ds = await db.get(RagEvalDataset, task.dataset_id)
+        task.dataset_name = ds.name if ds else ""
+    else:
+        task.dataset_name = "聊天抽样"
+    kb = await db.get(KnowledgeBase, task.kb_id)
+    task.kb_name = kb.name if kb else ""
+
+    return task
+
+
 async def cancel_task(db: AsyncSession, task_id: int) -> bool:
     task = await db.get(RagEvalTask, task_id)
     if not task or task.status not in ("pending", "running"):

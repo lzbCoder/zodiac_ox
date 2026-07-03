@@ -112,6 +112,11 @@ class RagEvalTaskResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RagEvalTaskUpdate(BaseModel):
+    """仅允许修改任务名称。"""
+    name: str = Field(min_length=1, max_length=100)
+
+
 # ── Result ───────────────────────────────────────────────
 
 class RagEvalResultResponse(BaseModel):

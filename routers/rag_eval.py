@@ -6,7 +6,7 @@ from database import get_db
 from schemas.rag_eval import (
     RagEvalDatasetCreate, RagEvalDatasetUpdate, RagEvalDatasetResponse,
     RagEvalQuestionResponse,
-    RagEvalTaskCreate, RagEvalTaskResponse,
+    RagEvalTaskCreate, RagEvalTaskResponse, RagEvalTaskUpdate,
     RagEvalResultResponse, RagEvalReportData,
     RagEvalConfigUpdate, RagEvalConfigResponse,
     RagEvalLabelTaskCreate, RagEvalLabelTaskUpdate, RagEvalLabelTaskResponse,
@@ -169,6 +169,14 @@ async def cancel_task(task_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="任务状态不允许取消")
     eval_engine.request_cancel(task_id)
     return {"message": "已请求取消"}
+
+
+@router.put("/tasks/{task_id}", response_model=RagEvalTaskResponse)
+async def update_task(task_id: int, data: RagEvalTaskUpdate, db: AsyncSession = Depends(get_db)):
+    task = await eval_task_service.update_task(db, task_id, data.name)
+    if not task:
+        raise HTTPException(status_code=404, detail="评测任务不存在")
+    return task
 
 
 @router.delete("/tasks/{task_id}")
