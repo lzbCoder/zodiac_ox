@@ -70,11 +70,12 @@ async def upload_document(
 async def list_documents(
     kb_id: int | None = Query(None),
     file_type: str | None = Query(None),
+    filename: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    docs, total = await document_service.list_documents(db, kb_id, file_type, page, page_size)
+    docs, total = await document_service.list_documents(db, kb_id, file_type, filename, page, page_size)
     return {"items": [DocumentResponse.model_validate(d) for d in docs], "total": total, "page": page, "page_size": page_size}
 
 

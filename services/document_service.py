@@ -46,7 +46,7 @@ async def get_document(db: AsyncSession, doc_id: int) -> Document | None:
     return result.scalar_one_or_none()
 
 
-async def list_documents(db: AsyncSession, kb_id: int | None = None, file_type: str | None = None, page: int = 1, page_size: int = 20) -> tuple[list[Document], int]:
+async def list_documents(db: AsyncSession, kb_id: int | None = None, file_type: str | None = None, filename: str | None = None, page: int = 1, page_size: int = 20) -> tuple[list[Document], int]:
     base = select(Document).where(Document.is_deleted == False)
     count_stmt = select(func.count(Document.id)).where(Document.is_deleted == False)
 
@@ -56,6 +56,10 @@ async def list_documents(db: AsyncSession, kb_id: int | None = None, file_type: 
     if file_type:
         base = base.where(Document.file_type == file_type)
         count_stmt = count_stmt.where(Document.file_type == file_type)
+    if filename:
+        pattern = f"%{filename}%"
+        base = base.where(Document.filename.ilike(pattern))
+        count_stmt = count_stmt.where(Document.filename.ilike(pattern))
 
     total = (await db.execute(count_stmt)).scalar() or 0
 
@@ -68,6 +72,8 @@ async def list_documents(db: AsyncSession, kb_id: int | None = None, file_type: 
         stmt = stmt.where(Document.kb_id == kb_id)
     if file_type:
         stmt = stmt.where(Document.file_type == file_type)
+    if filename:
+        stmt = stmt.where(Document.filename.ilike(pattern))
     stmt = stmt.order_by(Document.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
 
     rows = (await db.execute(stmt)).all()
