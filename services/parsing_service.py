@@ -6,6 +6,7 @@ from llama_index.core.node_parser import (
     MarkdownNodeParser,
     HTMLNodeParser,
     CodeSplitter,
+    JSONNodeParser,
 )
 import config
 
@@ -44,6 +45,11 @@ def _html_parser(**__) -> HTMLNodeParser:
     return HTMLNodeParser()
 
 
+def _json_parser(**__) -> JSONNodeParser:
+    """JSON 解析器 — 按 JSON 结构拆解为扁平 key-path 文本节点。"""
+    return JSONNodeParser()
+
+
 def _code_parser_factory(language: str):
     """返回一个工厂函数，创建 CodeSplitter，失败时回退到 SentenceSplitter。"""
     def build(chunk_size: int = 1000, chunk_overlap: int = 100, split_separator: str = "\n\n", **__):
@@ -70,6 +76,8 @@ SPLITTER_MAP: dict[str, callable] = {
     ".markdown": _markdown_parser,
     ".html":    _html_parser,
     ".htm":     _html_parser,
+    # JSON 类型 — 按 JSON 结构拆解为扁平 key-path 文本
+    ".json":    _json_parser,
     # 代码类型 — 按 AST 感知切分
     ".py":   _code_parser_factory("python"),
     ".java": _code_parser_factory("java"),
