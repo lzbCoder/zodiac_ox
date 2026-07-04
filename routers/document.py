@@ -99,13 +99,38 @@ async def preview_document(doc_id: int, db: AsyncSession = Depends(get_db)):
     doc = await document_service.get_document(db, doc_id)
     if not doc:
         raise HTTPException(status_code=404, detail="文档不存在")
-    content = await parsing_service.read_file_content(doc.file_path)
+
     chunks = await document_service.get_chunks_by_doc(db, doc_id)
+
+    # 从分片文本重建全文内容，确保每个分片的 start/end 位置在前端
+    # 切片时完全匹配，不受 PDF 等文件提取非确定性的影响。
+    parts: list[str] = []
+    cumulative = 0
+    corrected: list[ChunkPreview] = []
+    for i, c in enumerate(chunks):
+        # SQLAlchemy 异步 ORM 对 TEXT 列可能返回惰性代理对象，
+        # 导致 len() 与完整序列化后的长度不一致，始终用 str() 强制
+        # 转为普通 Python 字符串以保证字符数一致。
+        chunk_text = str(c.content)
+        clen = len(chunk_text)
+        parts.append(chunk_text)
+        corrected.append(ChunkPreview(
+            chunk_index=c.chunk_index,
+            content=chunk_text,
+            page_num=c.page_num,
+            start_pos=cumulative,
+            end_pos=cumulative + clen,
+        ))
+        cumulative += clen
+        if i < len(chunks) - 1:
+            cumulative += 2  # 分片间 "\n\n" 分隔符
+    content = "\n\n".join(parts)
+
     return DocumentPreview(
         filename=doc.filename,
         file_type=doc.file_type,
         content=content,
-        chunks=[ChunkPreview(chunk_index=c.chunk_index, content=c.content, page_num=c.page_num, start_pos=c.start_pos, end_pos=c.end_pos) for c in chunks],
+        chunks=corrected,
     )
 
 

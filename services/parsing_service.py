@@ -167,8 +167,6 @@ def _parse_document_sync(
             "chunk_index": i,
             "content": clean_text,
             "page_num": page_num,
-            "start_pos": node.start_char_idx or 0,
-            "end_pos": node.end_char_idx or 0,
         })
     return chunks
 
