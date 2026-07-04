@@ -11,6 +11,23 @@ from llama_index.core.node_parser import (
 import config
 
 
+# 图片类扩展名列表，用于注入 EasyOCR 读取器
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+
+
+def _build_reader(file_path: str) -> SimpleDirectoryReader:
+    """构建 SimpleDirectoryReader，对图片文件注入 EasyOCR 读取器。"""
+    ext = Path(file_path).suffix.lower()
+    if ext in _IMAGE_EXTS:
+        from services.ocr_reader import EasyOCRReader
+
+        return SimpleDirectoryReader(
+            input_files=[file_path],
+            file_extractor={ext: EasyOCRReader()},
+        )
+    return SimpleDirectoryReader(input_files=[file_path])
+
+
 def _sanitize_text(text: str) -> str:
     """移除会导致 PostgreSQL UTF-8 错误的空字节和代理字符。"""
     return text.replace("\x00", "").encode("utf-8", errors="replace").decode("utf-8")
@@ -144,7 +161,7 @@ def _parse_document_sync(
     chunk_overlap: int,
     split_separator: str,
 ) -> list[dict]:
-    reader = SimpleDirectoryReader(input_files=[file_path])
+    reader = _build_reader(file_path)
     docs = reader.load_data()
 
     parser = _get_parser(file_path, chunk_size, chunk_overlap, split_separator)
