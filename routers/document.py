@@ -105,7 +105,7 @@ async def preview_document(doc_id: int, db: AsyncSession = Depends(get_db)):
         filename=doc.filename,
         file_type=doc.file_type,
         content=content,
-        chunks=[ChunkPreview(chunk_index=c.chunk_index, content=c.content, page_num=c.page_num) for c in chunks],
+        chunks=[ChunkPreview(chunk_index=c.chunk_index, content=c.content, page_num=c.page_num, start_pos=c.start_pos, end_pos=c.end_pos) for c in chunks],
     )
 
 
@@ -118,7 +118,7 @@ async def preview_chunks(
 ):
     file_path, _, _ = await document_service.save_upload_file(file, 0)
     chunks = await parsing_service.preview_chunks(file_path, chunk_size, chunk_overlap, split_separator)
-    return {"chunks": [ChunkPreview(chunk_index=c["chunk_index"], content=c["content"], page_num=c["page_num"]) for c in chunks]}
+    return {"chunks": [ChunkPreview(chunk_index=c["chunk_index"], content=c["content"], page_num=c["page_num"], start_pos=c.get("start_pos", 0), end_pos=c.get("end_pos", 0)) for c in chunks]}
 
 
 @router.delete("/{doc_id}")

@@ -30,6 +30,8 @@ class ChunkPreview(BaseModel):
     chunk_index: int
     content: str
     page_num: int = 0
+    start_pos: int = 0
+    end_pos: int = 0
 
 
 class DocumentPreview(BaseModel):
