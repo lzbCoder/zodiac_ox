@@ -34,7 +34,6 @@ class DocumentResponse(BaseModel):
     vector_status: str
     chunk_count: int
     created_at: datetime
-    is_deleted: bool
 
     model_config = {"from_attributes": True}
 

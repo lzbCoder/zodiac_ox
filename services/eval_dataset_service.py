@@ -1,4 +1,4 @@
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.rag_eval_dataset import RagEvalDataset
 from models.rag_eval_question import RagEvalQuestion
@@ -14,7 +14,7 @@ async def create_dataset(db: AsyncSession, kb_id: int, name: str, description: s
 
 
 async def list_datasets(db: AsyncSession, kb_id: int | None = None, page: int = 1, page_size: int = 20) -> tuple[list[RagEvalDataset], int]:
-    base = select(RagEvalDataset).where(RagEvalDataset.is_deleted == False)
+    base = select(RagEvalDataset)
     if kb_id is not None:
         base = base.where(RagEvalDataset.kb_id == kb_id)
 
@@ -31,7 +31,7 @@ async def list_datasets(db: AsyncSession, kb_id: int | None = None, page: int = 
 
 
 async def get_dataset(db: AsyncSession, dataset_id: int) -> RagEvalDataset | None:
-    stmt = select(RagEvalDataset).where(RagEvalDataset.id == dataset_id, RagEvalDataset.is_deleted == False)
+    stmt = select(RagEvalDataset).where(RagEvalDataset.id == dataset_id)
     ds = (await db.execute(stmt)).scalar_one_or_none()
     if ds:
         await _attach_kb_names(db, [ds])
@@ -44,7 +44,7 @@ async def _attach_kb_names(db: AsyncSession, datasets: list[RagEvalDataset]):
     if not kb_ids:
         return
     kb_stmt = select(KnowledgeBase.id, KnowledgeBase.name).where(
-        KnowledgeBase.id.in_(kb_ids), KnowledgeBase.is_deleted == False
+        KnowledgeBase.id.in_(kb_ids)
     )
     kb_map = {row.id: row.name for row in (await db.execute(kb_stmt)).all()}
     for d in datasets:
@@ -68,7 +68,7 @@ async def delete_dataset(db: AsyncSession, dataset_id: int) -> bool:
     ds = await get_dataset(db, dataset_id)
     if not ds:
         return False
-    ds.is_deleted = True
+    await db.delete(ds)
     await db.commit()
     return True
 
@@ -101,7 +101,6 @@ async def import_questions_from_rows(db: AsyncSession, dataset_id: int, kb_id: i
 async def list_questions(db: AsyncSession, dataset_id: int, page: int = 1, page_size: int = 100) -> tuple[list[RagEvalQuestion], int]:
     base = select(RagEvalQuestion).where(
         RagEvalQuestion.dataset_id == dataset_id,
-        RagEvalQuestion.is_deleted == False,
     )
     count_stmt = select(func.count()).select_from(base.subquery())
     total = (await db.execute(count_stmt)).scalar() or 0
@@ -112,10 +111,9 @@ async def list_questions(db: AsyncSession, dataset_id: int, page: int = 1, page_
 
 
 async def delete_question(db: AsyncSession, question_id: int) -> bool:
-    stmt = select(RagEvalQuestion).where(RagEvalQuestion.id == question_id, RagEvalQuestion.is_deleted == False)
-    q = (await db.execute(stmt)).scalar_one_or_none()
+    q = await db.get(RagEvalQuestion, question_id)
     if not q:
         return False
-    q.is_deleted = True
+    await db.delete(q)
     await db.commit()
     return True

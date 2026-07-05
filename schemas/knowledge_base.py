@@ -18,7 +18,6 @@ class KBResponse(BaseModel):
     description: str | None
     created_at: datetime
     updated_at: datetime
-    is_deleted: bool
     doc_count: int = 0
     vector_status: str = "normal"
 

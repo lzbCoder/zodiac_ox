@@ -2,7 +2,7 @@ import os
 import aiofiles
 import random
 from datetime import datetime
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.document import Document
 from models.document_chunk import DocumentChunk
@@ -66,14 +66,14 @@ async def create_document(db: AsyncSession, kb_id: int, filename: str, file_type
 
 
 async def get_document(db: AsyncSession, doc_id: int) -> Document | None:
-    stmt = select(Document).where(Document.id == doc_id, Document.is_deleted == False)
+    stmt = select(Document).where(Document.id == doc_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
 async def list_documents(db: AsyncSession, kb_id: int | None = None, file_type: str | None = None, filename: str | None = None, page: int = 1, page_size: int = 20) -> tuple[list[Document], int]:
-    base = select(Document).where(Document.is_deleted == False)
-    count_stmt = select(func.count(Document.id)).where(Document.is_deleted == False)
+    base = select(Document)
+    count_stmt = select(func.count(Document.id))
 
     if kb_id:
         base = base.where(Document.kb_id == kb_id)
@@ -91,7 +91,6 @@ async def list_documents(db: AsyncSession, kb_id: int | None = None, file_type: 
     stmt = (
         select(Document, KnowledgeBase.name)
         .join(KnowledgeBase, Document.kb_id == KnowledgeBase.id)
-        .where(Document.is_deleted == False)
     )
     if kb_id:
         stmt = stmt.where(Document.kb_id == kb_id)
@@ -126,7 +125,8 @@ async def delete_document(db: AsyncSession, doc_id: int) -> bool:
     doc = await get_document(db, doc_id)
     if not doc:
         return False
-    doc.is_deleted = True
+    # 使用 bulk delete 绕过 ORM cascade，DB 侧 ON DELETE CASCADE 自动清理 document_chunks
+    await db.execute(delete(Document).where(Document.id == doc_id))
     await db.commit()
     return True
 
@@ -175,7 +175,7 @@ async def save_chunks(db: AsyncSession, kb_id: int, doc_id: int, chunks: list[di
 async def get_distinct_file_types(db: AsyncSession) -> list[str]:
     """查询文档表中所有已出现的文件类型（去重）。"""
     from sqlalchemy import select, func
-    stmt = select(Document.file_type).distinct().where(Document.is_deleted == False).order_by(Document.file_type)
+    stmt = select(Document.file_type).distinct().order_by(Document.file_type)
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows)
 

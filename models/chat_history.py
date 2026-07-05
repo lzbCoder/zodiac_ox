@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, Boolean, Integer, DateTime, func
+from sqlalchemy import String, Text, Integer, DateTime, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from database import Base
@@ -17,4 +17,3 @@ class ChatHistory(Base):
     ai_answer: Mapped[str] = mapped_column(Text, nullable=False)
     reference_chunks: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)

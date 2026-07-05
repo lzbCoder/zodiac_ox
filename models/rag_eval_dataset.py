@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, Boolean, DateTime, Integer, func
+from sqlalchemy import String, Text, DateTime, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
@@ -16,6 +16,5 @@ class RagEvalDataset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
     created_by: Mapped[str | None] = mapped_column(String(100))
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     questions = relationship("RagEvalQuestion", back_populates="dataset", lazy="selectin", cascade="all, delete-orphan")

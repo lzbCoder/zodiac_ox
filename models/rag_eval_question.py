@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, Boolean, DateTime, Integer, ForeignKey, func
+from sqlalchemy import String, Text, DateTime, Integer, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import ARRAY
 from database import Base
@@ -18,6 +18,5 @@ class RagEvalQuestion(Base):
     standard_chunk_ids: Mapped[list | None] = mapped_column(ARRAY(Integer))
     difficulty: Mapped[str] = mapped_column(String(20), default="medium")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     dataset = relationship("RagEvalDataset", back_populates="questions")

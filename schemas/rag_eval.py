@@ -26,7 +26,6 @@ class RagEvalDatasetResponse(BaseModel):
     created_at: datetime
     updated_at: datetime | None = None
     created_by: str | None = None
-    is_deleted: bool = False
 
     model_config = {"from_attributes": True}
 

@@ -36,7 +36,6 @@ async def get_sessions(db: AsyncSession, page: int = 1, page_size: int = 20) -> 
             func.count(ChatHistory.id).label("msg_count"),
             func.max(ChatHistory.created_at).label("last_time"),
         )
-        .where(ChatHistory.is_deleted == False)
         .group_by(ChatHistory.session_id)
         .subquery()
     )
@@ -69,7 +68,7 @@ async def get_sessions(db: AsyncSession, page: int = 1, page_size: int = 20) -> 
 async def get_session_messages(db: AsyncSession, session_id: str) -> list[ChatHistory]:
     stmt = (
         select(ChatHistory)
-        .where(ChatHistory.session_id == session_id, ChatHistory.is_deleted == False)
+        .where(ChatHistory.session_id == session_id)
         .order_by(ChatHistory.created_at)
     )
     result = await db.execute(stmt)
@@ -83,7 +82,7 @@ async def update_message(
     reference_chunks: list | None = None,
 ) -> ChatHistory | None:
     msg = await db.get(ChatHistory, message_id)
-    if not msg or msg.is_deleted:
+    if not msg:
         return None
     msg.ai_answer = ai_answer
     msg.reference_chunks = reference_chunks
@@ -93,22 +92,16 @@ async def update_message(
 
 
 async def delete_message(db: AsyncSession, msg_id: int) -> bool:
-    stmt = select(ChatHistory).where(ChatHistory.id == msg_id, ChatHistory.is_deleted == False)
-    result = await db.execute(stmt)
-    msg = result.scalar_one_or_none()
+    msg = await db.get(ChatHistory, msg_id)
     if not msg:
         return False
-    msg.is_deleted = True
+    await db.delete(msg)
     await db.commit()
     return True
 
 
 async def clear_session(db: AsyncSession, session_id: str):
-    stmt = (
-        update(ChatHistory)
-        .where(ChatHistory.session_id == session_id)
-        .values(is_deleted=True)
-    )
+    stmt = delete(ChatHistory).where(ChatHistory.session_id == session_id)
     await db.execute(stmt)
     await db.commit()
 

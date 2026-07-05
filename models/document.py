@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import String, Text, Boolean, BigInteger, Integer, DateTime, ForeignKey, func
+from sqlalchemy import String, BigInteger, Integer, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
@@ -19,7 +19,6 @@ class Document(Base):
     vector_status: Mapped[str] = mapped_column(String(20), default="pending")
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
 
     knowledge_base = relationship("KnowledgeBase", back_populates="documents")
     chunks = relationship("DocumentChunk", back_populates="document", lazy="selectin")

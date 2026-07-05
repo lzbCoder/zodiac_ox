@@ -63,7 +63,6 @@ def _calculate_metrics(standard_chunk_ids: list[int] | None, retrieved_chunk_ids
 async def _sample_chat_histories(db, task: RagEvalTask) -> list[EvalQuestion]:
     """从 chat_histories 按条件抽样，返回统一的问题结构列表。"""
     base = select(ChatHistory).where(
-        ChatHistory.is_deleted == False,
         ChatHistory.user_query != "",
         ChatHistory.ai_answer != "",
     )
@@ -125,7 +124,6 @@ async def _load_questions_for_task(db, task: RagEvalTask) -> list[EvalQuestion]:
 
     q_stmt = select(RagEvalQuestion).where(
         RagEvalQuestion.dataset_id == task.dataset_id,
-        RagEvalQuestion.is_deleted == False,
     )
     q_rows = (await db.execute(q_stmt)).scalars().all()
     return [

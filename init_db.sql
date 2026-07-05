@@ -12,8 +12,7 @@ CREATE TABLE IF NOT EXISTS root.knowledge_bases (
     name VARCHAR(100) NOT NULL,
     description TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    is_deleted BOOLEAN DEFAULT FALSE
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- 2. 原始文档表
@@ -29,7 +28,6 @@ CREATE TABLE IF NOT EXISTS root.documents (
     vector_status VARCHAR(20) DEFAULT 'pending',
     chunk_count INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
-    is_deleted BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (kb_id) REFERENCES root.knowledge_bases(id) ON DELETE CASCADE
 );
 
@@ -68,8 +66,7 @@ CREATE TABLE IF NOT EXISTS root.chat_histories (
     user_query TEXT NOT NULL,
     ai_answer TEXT NOT NULL,
     reference_chunks JSONB,
-    created_at TIMESTAMP DEFAULT NOW(),
-    is_deleted BOOLEAN DEFAULT FALSE
+    created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_chat_histories_session_id ON root.chat_histories(session_id);
 
@@ -95,11 +92,9 @@ CREATE TABLE IF NOT EXISTS root.rag_eval_datasets (
     total_questions INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
-    created_by VARCHAR(100),
-    is_deleted BOOLEAN DEFAULT FALSE
+    created_by VARCHAR(100)
 );
 CREATE INDEX IF NOT EXISTS idx_rag_eval_datasets_kb_id ON root.rag_eval_datasets(kb_id);
-CREATE INDEX IF NOT EXISTS idx_rag_eval_datasets_is_deleted ON root.rag_eval_datasets(is_deleted);
 
 -- 8. 评测问题表
 CREATE TABLE IF NOT EXISTS root.rag_eval_questions (
@@ -112,7 +107,6 @@ CREATE TABLE IF NOT EXISTS root.rag_eval_questions (
     standard_chunk_ids INT[],
     difficulty VARCHAR(20) DEFAULT 'medium',
     created_at TIMESTAMP DEFAULT NOW(),
-    is_deleted BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (dataset_id) REFERENCES root.rag_eval_datasets(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_rag_eval_questions_dataset_id ON root.rag_eval_questions(dataset_id);
