@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from schemas.document import ChunkConfigInput, DocumentResponse, DocumentPreview, ChunkPreview
@@ -132,6 +133,20 @@ async def preview_document(doc_id: int, db: AsyncSession = Depends(get_db)):
         content=content,
         chunks=corrected,
     )
+
+
+_IMAGE_FILE_TYPES = {"jpg", "jpeg", "png", "gif", "webp", "bmp"}
+
+
+@router.get("/{doc_id}/file")
+async def get_document_file(doc_id: int, db: AsyncSession = Depends(get_db)):
+    """返回文档的原始文件，图片可直接在 <img> 中引用。"""
+    doc = await document_service.get_document(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    if doc.file_type.lower() not in _IMAGE_FILE_TYPES:
+        raise HTTPException(status_code=400, detail="仅支持图片文件预览")
+    return FileResponse(doc.file_path)
 
 
 @router.post("/preview-chunks")
