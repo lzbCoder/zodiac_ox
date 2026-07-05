@@ -2,7 +2,6 @@ import os
 import aiofiles
 import random
 from datetime import datetime
-from pathlib import Path
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from models.document import Document
@@ -12,16 +11,42 @@ from models.knowledge_base import KnowledgeBase
 from config import DATA_DIR
 
 
+_MAGIC_EXT_MAP: dict[bytes, str] = {
+    b"\xff\xd8": ".jpg",
+    b"\x89PNG": ".png",
+    b"GIF87a": ".gif",
+    b"GIF89a": ".gif",
+    b"RIFF": ".webp",  # WEBP 前 4 字节是 RIFF，后续会再确认
+}
+
+
+def _detect_ext(data: bytes, fallback: str) -> str:
+    """通过文件头部魔数检测扩展名，失败时返回 fallback。"""
+    for magic, ext in _MAGIC_EXT_MAP.items():
+        if data.startswith(magic):
+            if ext == ".webp" and data[8:12] != b"WEBP":
+                continue
+            return ext
+    return fallback
+
+
 async def save_upload_file(file, kb_id: int) -> tuple[str, str, int]:
     kb_dir = DATA_DIR / str(kb_id)
     kb_dir.mkdir(parents=True, exist_ok=True)
-    file_ext = Path(file.filename).suffix.lower()
-    original_name = Path(file.filename).stem
+    content = await file.read()
+
+    # 从文件名提取扩展名（Windows GBK 环境下含中文的文件名可能被损坏，
+    # 此时用文件魔数检测兜底）。
+    name = file.filename or ""
+    dot_idx = name.rfind(".")
+    ext_from_name = name[dot_idx:].lower() if dot_idx >= 0 else ""
+    file_ext = _detect_ext(content, ext_from_name) if not ext_from_name else ext_from_name
+
+    original_stem = name[:dot_idx] if dot_idx >= 0 else name
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     random_suffix = f"{random.randint(0, 99):02d}"
-    stored_name = f"{original_name}_{timestamp}_{random_suffix}{file_ext}"
+    stored_name = f"{original_stem}_{timestamp}_{random_suffix}{file_ext}"
     file_path = kb_dir / stored_name
-    content = await file.read()
     async with aiofiles.open(file_path, "wb") as f:
         await f.write(content)
     return str(file_path), file_ext.lstrip("."), len(content)
