@@ -15,9 +15,14 @@ router = APIRouter(prefix="/api/documents", tags=["文档管理"])
 async def upload_document(
     file: UploadFile = File(...),
     kb_id: int = Form(...),
+    file_category: str = Form(...),
+    chunk_strategy: str = Form("default"),
     chunk_size: int = Form(1000),
     chunk_overlap: int = Form(100),
     split_separator: str = Form("\n\n"),
+    language: str | None = Form(None),
+    chunk_lines: int = Form(40),
+    chunk_lines_overlap: int = Form(3),
     db: AsyncSession = Depends(get_db),
 ):
     if not file.filename:
@@ -36,8 +41,15 @@ async def upload_document(
     try:
         await document_service.update_document_status(db, doc.id, upload_status="processing")
 
-        # 解析文档为 chunks
-        chunks = await parsing_service.parse_document(file_path, chunk_size, chunk_overlap, split_separator)
+        # 解析文档为 chunks（与预览共用同一套切分逻辑）
+        chunks = await parsing_service.parse_document(
+            file_path, chunk_size, chunk_overlap, split_separator,
+            file_category=file_category,
+            chunk_strategy=chunk_strategy,
+            language=language,
+            chunk_lines=chunk_lines,
+            chunk_lines_overlap=chunk_lines_overlap,
+        )
         if not chunks:
             await document_service.update_document_status(db, doc.id, upload_status="failed")
             raise HTTPException(status_code=400, detail="无法解析文档内容")
@@ -149,16 +161,29 @@ async def get_document_file(doc_id: int, db: AsyncSession = Depends(get_db)):
     return FileResponse(doc.file_path)
 
 
-@router.post("/preview-chunks")
-async def preview_chunks(
+@router.post("/preview-chunks-by-parser")
+async def preview_chunks_by_parser(
     file: UploadFile = File(...),
+    file_category: str = Form(...),
+    chunk_strategy: str = Form("default"),
     chunk_size: int = Form(1000),
     chunk_overlap: int = Form(100),
     split_separator: str = Form("\n\n"),
+    language: str | None = Form(None),
+    chunk_lines: int = Form(40),
+    chunk_lines_overlap: int = Form(3),
 ):
+    """按文件类型分类 + 切片策略预览分片，与实际上传共用同一套切分逻辑。"""
     file_path, _, _ = await document_service.save_upload_file(file, 0)
-    chunks = await parsing_service.preview_chunks(file_path, chunk_size, chunk_overlap, split_separator)
-    return {"chunks": [ChunkPreview(chunk_index=c["chunk_index"], content=c["content"], page_num=c["page_num"], start_pos=c.get("start_pos", 0), end_pos=c.get("end_pos", 0)) for c in chunks]}
+    chunks = await parsing_service.parse_document(
+        file_path, chunk_size, chunk_overlap, split_separator,
+        file_category=file_category,
+        chunk_strategy=chunk_strategy,
+        language=language,
+        chunk_lines=chunk_lines,
+        chunk_lines_overlap=chunk_lines_overlap,
+    )
+    return {"chunks": [ChunkPreview(**c) for c in chunks]}
 
 
 @router.delete("/{doc_id}")

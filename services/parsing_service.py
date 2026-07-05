@@ -142,17 +142,87 @@ def _get_parser(file_path: str, chunk_size: int, chunk_overlap: int, split_separ
     return factory(chunk_size=chunk_size, chunk_overlap=chunk_overlap, split_separator=split_separator)
 
 
+class _NoOpParser:
+    """不执行任何分割，每个 Document 直接作为一个 chunk（按页切片）。"""
+
+    def get_nodes_from_documents(self, docs):
+        from llama_index.core.schema import TextNode
+
+        return [
+            TextNode(
+                text=doc.text,
+                metadata=doc.metadata,
+                relationships=doc.relationships,
+            )
+            for doc in docs
+        ]
+
+
+def _get_parser_by_category(
+    file_category: str,
+    chunk_strategy: str,
+    chunk_size: int = 1000,
+    chunk_overlap: int = 100,
+    split_separator: str = "\n\n",
+    language: str | None = None,
+    chunk_lines: int = 40,
+    chunk_lines_overlap: int = 3,
+):
+    """根据文件类型分类 + 切片策略选择合适的解析器。"""
+    # 整文件切片 / 按页切片 → 不分割
+    if chunk_strategy in ("whole_file", "by_page"):
+        return _NoOpParser()
+
+    if file_category == "code":
+        lang = language or "python"
+        try:
+            return CodeSplitter(
+                language=lang,
+                chunk_lines=chunk_lines,
+                chunk_lines_overlap=chunk_lines_overlap,
+            )
+        except Exception:
+            return SentenceSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                paragraph_separator=split_separator,
+            )
+
+    # structured / text / image → SentenceSplitter
+    return SentenceSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        paragraph_separator=split_separator,
+    )
+
+
 async def parse_document(
     file_path: str,
     chunk_size: int | None = None,
     chunk_overlap: int | None = None,
     split_separator: str | None = None,
+    file_category: str | None = None,
+    chunk_strategy: str = "default",
+    language: str | None = None,
+    chunk_lines: int = 40,
+    chunk_lines_overlap: int = 3,
 ) -> list[dict]:
     """异步包装：在 thread pool 中执行同步解析逻辑，避免阻塞事件循环。"""
     chunk_size = chunk_size or config.DEFAULT_CHUNK_SIZE
     chunk_overlap = chunk_overlap or config.DEFAULT_CHUNK_OVERLAP
     split_separator = split_separator or config.DEFAULT_SPLIT_SEPARATOR
-    return await asyncio.to_thread(_parse_document_sync, file_path, chunk_size, chunk_overlap, split_separator)
+    return await asyncio.to_thread(
+        _parse_document_sync,
+        file_path,
+        chunk_size,
+        chunk_overlap,
+        split_separator,
+        file_category=file_category,
+        chunk_strategy=chunk_strategy,
+        language=language,
+        chunk_lines=chunk_lines,
+        chunk_lines_overlap=chunk_lines_overlap,
+    )
 
 
 def _parse_document_sync(
@@ -160,11 +230,28 @@ def _parse_document_sync(
     chunk_size: int,
     chunk_overlap: int,
     split_separator: str,
+    file_category: str | None = None,
+    chunk_strategy: str = "default",
+    language: str | None = None,
+    chunk_lines: int = 40,
+    chunk_lines_overlap: int = 3,
 ) -> list[dict]:
     reader = _build_reader(file_path)
     docs = reader.load_data()
 
-    parser = _get_parser(file_path, chunk_size, chunk_overlap, split_separator)
+    if file_category:
+        parser = _get_parser_by_category(
+            file_category=file_category,
+            chunk_strategy=chunk_strategy,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            split_separator=split_separator,
+            language=language,
+            chunk_lines=chunk_lines,
+            chunk_lines_overlap=chunk_lines_overlap,
+        )
+    else:
+        parser = _get_parser(file_path, chunk_size, chunk_overlap, split_separator)
     nodes = parser.get_nodes_from_documents(docs)
 
     chunks = []
@@ -186,15 +273,6 @@ def _parse_document_sync(
             "page_num": page_num,
         })
     return chunks
-
-
-async def preview_chunks(
-    file_path: str,
-    chunk_size: int = 1000,
-    chunk_overlap: int = 100,
-    split_separator: str = "\n\n",
-) -> list[dict]:
-    return await parse_document(file_path, chunk_size, chunk_overlap, split_separator)
 
 
 async def read_file_content(file_path: str) -> str:
