@@ -13,6 +13,66 @@ _UNSUPPORTED_CODE_EXTS = {".py", ".pyw"}  # 避免触发 uvicorn --reload WatchF
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10M — 单文件业务限制
 
+# 扩展名 → 期望的 MIME 类型（None 表示跳过校验）
+_MIME_MAP: dict[str, set[str] | None] = {
+    ".md":       {"text/markdown", "text/plain", "text/x-markdown"},
+    ".markdown": {"text/markdown", "text/plain", "text/x-markdown"},
+    ".html":     {"text/html"},
+    ".htm":      {"text/html"},
+    ".json":     {"application/json"},
+    ".pdf":      {"application/pdf"},
+    ".txt":      {"text/plain"},
+    ".doc":      {"application/msword"},
+    ".docx":     {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+    ".xls":      {"application/vnd.ms-excel"},
+    ".xlsx":     {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+    ".ppt":      {"application/vnd.ms-powerpoint"},
+    ".pptx":     {"application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+    ".png":      {"image/png"},
+    ".jpg":      {"image/jpeg"},
+    ".jpeg":     {"image/jpeg"},
+    ".gif":      {"image/gif"},
+    ".webp":     {"image/webp"},
+}
+
+
+def _validate_mime(filename: str, content_type: str | None) -> None:
+    """校验文件扩展名与 MIME 类型是否匹配，不匹配则拒绝。"""
+    if not content_type:
+        return
+    ext = Path(filename).suffix.lower()
+    expected = _MIME_MAP.get(ext)
+    if expected is None:
+        return  # 无对应映射（如代码文件），跳过
+    # 宽松放过 application/octet-stream（不确定类型）
+    if content_type in ("application/octet-stream", "application/x-binary"):
+        return
+    if content_type not in expected:
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件类型不匹配：{ext} 文件期望 {expected}，实际收到 {content_type}",
+        )
+
+
+def _validate_file(file: UploadFile, file_category: str) -> None:
+    """文件上传前的通用格式校验：文件名、扩展名、大小、MIME 类型。"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    # 拒绝 .py 等会触发 WatchFiles reload 的文件类型
+    if file_category == "code" and Path(file.filename).suffix.lower() in _UNSUPPORTED_CODE_EXTS:
+        raise HTTPException(status_code=400, detail=f"不支持 {Path(file.filename).suffix} 代码文件，请选择其他文件")
+
+    # 文件大小校验（优先用 content-length）
+    if file.size is not None and file.size == 0:
+        raise HTTPException(status_code=400, detail="文件为空，请检查后重新上传")
+    if file.size is not None and file.size > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=400, detail="单文件最大支持 10M，当前文件超出限制")
+
+    # MIME 类型校验
+    _validate_mime(file.filename, file.content_type)
+
+
 router = APIRouter(prefix="/api/documents", tags=["文档管理"])
 
 
@@ -27,20 +87,18 @@ async def upload_document(
     split_separator: str = Form("\n\n"),
     db: AsyncSession = Depends(get_db),
 ):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="文件名不能为空")
-
-    # 拒绝 .py 等会触发 WatchFiles reload 的文件类型
-    if file_category == "code" and Path(file.filename).suffix.lower() in _UNSUPPORTED_CODE_EXTS:
-        raise HTTPException(status_code=400, detail=f"不支持 {Path(file.filename).suffix} 代码文件，请选择其他文件")
+    _validate_file(file, file_category)
 
     # 保存文件
     file_path, file_type, file_size = await document_service.save_upload_file(file, kb_id)
 
-    # 业务规则：单文件最大 10M
-    if file_size > MAX_UPLOAD_SIZE:
+    # 业务规则：单文件最大 10M（content-length 为 None 时兜底）
+    if file.size is None and file_size > MAX_UPLOAD_SIZE:
         document_service.delete_local_file(file_path)
         raise HTTPException(status_code=400, detail="单文件最大支持 10M，当前文件超出限制")
+    if file_size == 0:
+        document_service.delete_local_file(file_path)
+        raise HTTPException(status_code=400, detail="文件为空，请检查后重新上传")
 
     doc = await document_service.create_document(db, kb_id, file.filename, file_type, file_path, file_size)
 
@@ -173,8 +231,8 @@ async def preview_chunks_by_parser(
     split_separator: str = Form("\n\n"),
 ):
     """按文件类型分类 + 切片策略预览分片，与实际上传共用同一套切分逻辑。"""
-    if file_category == "code" and Path(file.filename).suffix.lower() in _UNSUPPORTED_CODE_EXTS:
-        raise HTTPException(status_code=400, detail=f"不支持 {Path(file.filename).suffix} 代码文件，请选择其他文件")
+    _validate_file(file, file_category)
+
     file_path, _, _ = await document_service.save_upload_file(file, 0)
     chunks = await parsing_service.parse_document(
         file_path, chunk_size, chunk_overlap, split_separator,

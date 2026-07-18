@@ -8,6 +8,7 @@ from llama_index.core.node_parser import (
     CodeSplitter,
     JSONNodeParser,
 )
+from loguru import logger
 import config
 
 
@@ -44,6 +45,15 @@ def _is_garbage(text: str) -> bool:
     ratio = printable / max(len(text), 1)
     # 启发式判断：可打印字符 < 30%，或大量控制字符/替换符号，则视为二进制
     return ratio < 0.30 or control > len(text) * 0.20 or replacements > 5
+
+
+def _calc_gibberish_ratio(text: str) -> float:
+    """计算文本的乱码率：替换字符 + 控制字符 / 总长度。"""
+    if len(text) < 20:
+        return 0.0
+    replacements = text.count("�")
+    control = sum(1 for c in text if ord(c) < 32 and c not in "\n\r\t")
+    return (replacements + control) / max(len(text), 1)
 
 
 def _sentence_parser(chunk_size: int, chunk_overlap: int, split_separator: str, **__) -> SentenceSplitter:
@@ -218,6 +228,14 @@ def _parse_document_sync(
     reader = _build_reader(file_path)
     docs = reader.load_data()
 
+    # 文件级乱码校验 —— 任何单个 doc 乱码率超过 10% 则整文件拒绝
+    for doc in docs:
+        gibberish_ratio = _calc_gibberish_ratio(doc.text)
+        if gibberish_ratio > 0.10:
+            raise ValueError(
+                f"文件内容乱码率过高（{gibberish_ratio:.1%}），无法解析"
+            )
+
     parser = _get_parser_by_category(
         file_path=file_path,
         chunk_strategy=chunk_strategy,
@@ -225,10 +243,19 @@ def _parse_document_sync(
         chunk_overlap=chunk_overlap,
         split_separator=split_separator,
     )
-    nodes = parser.get_nodes_from_documents(docs)
+
+    # 逐个 doc 解析，部分失败不中断（如 PDF 多页场景）
+    all_nodes = []
+    for doc in docs:
+        try:
+            nodes = parser.get_nodes_from_documents([doc])
+            all_nodes.extend(nodes)
+        except Exception as e:
+            logger.error(f"解析文档分片失败（file={file_path}）：{e}")
+            # 跳过失败的 doc，继续处理剩余部分
 
     chunks = []
-    for i, node in enumerate(nodes):
+    for i, node in enumerate(all_nodes):
         clean_text = _sanitize_text(node.text)
         if not clean_text.strip():
             continue
