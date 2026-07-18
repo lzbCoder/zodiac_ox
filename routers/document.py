@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,6 +7,9 @@ from database import get_db
 from schemas.document import ChunkConfigInput, DocumentResponse, DocumentPreview, ChunkPreview
 from services import document_service, parsing_service, embedding_service
 from milvus_client import get_collection
+
+
+_UNSUPPORTED_CODE_EXTS = {".py", ".pyw"}  # 避免触发 uvicorn --reload WatchFiles
 
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10M — 单文件业务限制
 
@@ -15,18 +20,19 @@ router = APIRouter(prefix="/api/documents", tags=["文档管理"])
 async def upload_document(
     file: UploadFile = File(...),
     kb_id: int = Form(...),
-    file_category: str = Form(...),
+    file_category: str = Form("text"),
     chunk_strategy: str = Form("default"),
     chunk_size: int = Form(1000),
     chunk_overlap: int = Form(100),
     split_separator: str = Form("\n\n"),
-    language: str | None = Form(None),
-    chunk_lines: int = Form(40),
-    chunk_lines_overlap: int = Form(3),
     db: AsyncSession = Depends(get_db),
 ):
     if not file.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
+
+    # 拒绝 .py 等会触发 WatchFiles reload 的文件类型
+    if file_category == "code" and Path(file.filename).suffix.lower() in _UNSUPPORTED_CODE_EXTS:
+        raise HTTPException(status_code=400, detail=f"不支持 {Path(file.filename).suffix} 代码文件，请选择其他文件")
 
     # 保存文件
     file_path, file_type, file_size = await document_service.save_upload_file(file, kb_id)
@@ -44,11 +50,7 @@ async def upload_document(
         # 解析文档为 chunks（与预览共用同一套切分逻辑）
         chunks = await parsing_service.parse_document(
             file_path, chunk_size, chunk_overlap, split_separator,
-            file_category=file_category,
             chunk_strategy=chunk_strategy,
-            language=language,
-            chunk_lines=chunk_lines,
-            chunk_lines_overlap=chunk_lines_overlap,
         )
         if not chunks:
             await document_service.update_document_status(db, doc.id, upload_status="failed")
@@ -164,24 +166,19 @@ async def get_document_file(doc_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/preview-chunks-by-parser")
 async def preview_chunks_by_parser(
     file: UploadFile = File(...),
-    file_category: str = Form(...),
+    file_category: str = Form("text"),
     chunk_strategy: str = Form("default"),
     chunk_size: int = Form(1000),
     chunk_overlap: int = Form(100),
     split_separator: str = Form("\n\n"),
-    language: str | None = Form(None),
-    chunk_lines: int = Form(40),
-    chunk_lines_overlap: int = Form(3),
 ):
     """按文件类型分类 + 切片策略预览分片，与实际上传共用同一套切分逻辑。"""
+    if file_category == "code" and Path(file.filename).suffix.lower() in _UNSUPPORTED_CODE_EXTS:
+        raise HTTPException(status_code=400, detail=f"不支持 {Path(file.filename).suffix} 代码文件，请选择其他文件")
     file_path, _, _ = await document_service.save_upload_file(file, 0)
     chunks = await parsing_service.parse_document(
         file_path, chunk_size, chunk_overlap, split_separator,
-        file_category=file_category,
         chunk_strategy=chunk_strategy,
-        language=language,
-        chunk_lines=chunk_lines,
-        chunk_lines_overlap=chunk_lines_overlap,
     )
     return {"chunks": [ChunkPreview(**c) for c in chunks]}
 
