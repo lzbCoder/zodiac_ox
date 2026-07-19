@@ -36,6 +36,9 @@ dependencies = [
     "pypdf>=6.11.0",
     "ragas>=0.4.3",
     "easyocr>=1.7.2",
+    # 显式声明 torch/torchvision 以匹配 CPU-only 索引（兼容 easyocr 传递依赖）
+    "torch>=2.0.0",
+    "torchvision>=0.15.1",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -44,6 +47,17 @@ packages = ["."]
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"
 default = true
+
+# PyTorch CPU-only 索引：解决 EasyOCR 追踪依赖安装 CUDA 版导致镜像膨胀 12GB 的问题
+# 显式声明 torch/torchvision 为 direct deps + explicit index 确保走 CPU 版本
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
 
 [build-system]
 requires = ["hatchling"]
